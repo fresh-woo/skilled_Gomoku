@@ -1,6 +1,6 @@
 import { applyCommand, startGame } from '../../../entities/game/model/game.ts'
 import type { GameMode, GameState, Position } from '../../../entities/game/model/game.ts'
-import { applySkillCommand } from '../../../entities/game/model/skillGame.ts'
+import { applySkillCommand, startSkillGame } from '../../../entities/game/model/skillGame.ts'
 import { startTestSkillGame } from '../../../entities/game/model/testSkillScenario.ts'
 import type { SkillGame } from '../../../entities/game/model/skillGame.ts'
 
@@ -24,18 +24,22 @@ export function startLocalSkillGame(mode: GameMode, previousGame: GameState | nu
   return startTestSkillGame(mode, players, Math.floor(random() * 0x100000000))
 }
 
+export function startLocalStoneSkillGame(mode: GameMode, previousGame: GameState | null, random = Math.random) {
+  return startSkillGame(mode, turnOrder(previousGame, random), null, Math.floor(random() * 0x100000000))
+}
+
 export type LocalSkillAction =
   | { type: 'place'; position: Position }
-  | { type: 'card'; cardId: number }
+  | { type: 'card'; cardId: number; position?: Position; discardCardId?: number }
   | { type: 'pass' }
 
-export function applyLocalSkillAction(state: SkillGame, action: LocalSkillAction) {
+export function applyLocalSkillAction(state: SkillGame, action: LocalSkillAction, now = 0) {
   const { game, response } = state
   if (game.status === 'finished') return { ok: false, reason: 'game-finished' } as const
 
   const actorId = game.players[game.turn.activeSeat].id
   if (action.type === 'place') {
-    return applySkillCommand(state, { type: 'place-stone', actorId, position: action.position })
+    return applySkillCommand(state, { type: 'place-stone', actorId, position: action.position }, now)
   }
   if (response) {
     return applySkillCommand(state, {
@@ -43,12 +47,13 @@ export function applyLocalSkillAction(state: SkillGame, action: LocalSkillAction
       actorId: response.targetId,
       attackId: response.id,
       cardId: action.type === 'card' ? action.cardId : undefined,
-    })
+      discardCardId: action.type === 'card' ? action.discardCardId : undefined,
+    }, now)
   }
   if (action.type === 'pass') return { ok: false, reason: 'invalid-response' } as const
 
   const targetId = game.players[1 - game.turn.activeSeat].id
-  return applySkillCommand(state, { type: 'use-skill', actorId, targetId, cardId: action.cardId })
+  return applySkillCommand(state, { type: 'use-skill', actorId, targetId, cardId: action.cardId, position: action.position }, now)
 }
 
 export function placeLocalStone(game: GameState, position: Position) {

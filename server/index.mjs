@@ -5,10 +5,10 @@ import { resolve, extname, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { WebSocketServer, WebSocket } from 'ws'
 import { applyCommand, startGame } from '../src/entities/game/model/game.ts'
-import { applySkillCommand } from '../src/entities/game/model/skillGame.ts'
+import { applySkillCommand, expireSnipe, startSkillGame, STONE_SKILL_COUNT } from '../src/entities/game/model/skillGame.ts'
 import { startTestSkillGame } from '../src/entities/game/model/testSkillScenario.ts'
 
-export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600_000, origins = [] } = {}) {
+export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600_000, origins = [], drawCard = () => randomInt(STONE_SKILL_COUNT) } = {}) {
   const rooms = new Map()
   const tokens = new Map()
   const root = fileURLToPath(new URL('../dist/', import.meta.url))
@@ -43,32 +43,60 @@ export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600
   function snapshot(room, member) {
     const game = room.skills?.game ?? room.game
     const skill = room.skills
+    const response = skill?.response
     // Explicit allowlist: no other hand, deck, RNG, scheduled effects or discarded-card payload.
     return {
-      type: 'snapshot', roomId: room.id, gameId: room.gameId, revision: room.revision,
+      type: 'snapshot', roomId: room.id, gameId: room.gameId, revision: room.revision, serverTime: Date.now(),
       playerId: member.id, mode: room.mode, rules: room.rules,
       members: room.members.map((m) => ({ id: m.id, connected: !!m.ws, ready: m.ready })),
       game,
       skills: skill ? {
         game, hands: { [member.id]: skill.hands[member.id] },
-        response: skill.response ? { id: skill.response.id, targetId: skill.response.targetId, phase: skill.response.phase } : null,
+        response: response ? {
+          id: response.id, targetId: response.targetId, phase: response.phase,
+          ...(response.phase === 'snipe' ? { position: response.position, deadline: response.deadline } : {}),
+        } : null,
+        shields: skill.shields,
+        usedStoneSkills: skill.usedStoneSkills,
+        snipeOutcome: skill.snipeOutcome,
       } : null,
       handCounts: skill ? Object.fromEntries(room.members.map((m) => [m.id, skill.hands[m.id].length])) : {},
     }
   }
   function broadcast(room) { for (const member of room.members) send(member.ws, snapshot(room, member)) }
+  function settleDefense(room, time) {
+    if (!room.skills) return false
+    const next = expireSnipe(room.skills, time)
+    if (next === room.skills) return false
+    room.skills = next
+    room.revision++
+    clearTimeout(room.defenseTimer)
+    broadcast(room)
+    return true
+  }
+  function scheduleDefense(room) {
+    clearTimeout(room.defenseTimer)
+    const response = room.skills?.response
+    if (response?.phase !== 'snipe') return
+    room.defenseTimer = setTimeout(() => {
+      if (!settleDefense(room, Date.now())) scheduleDefense(room)
+    }, Math.max(0, response.deadline - Date.now()))
+    room.defenseTimer.unref()
+  }
   function begin(room) {
     const previous = room.skills?.game ?? room.game
     const players = previous ? [...previous.players].reverse().map((p) => p.id)
       : (randomInt(2) ? ['black', 'white'] : ['white', 'black'])
     room.gameId = randomUUID()
     if (room.rules === 'skills') room.skills = startTestSkillGame(room.mode, players, randomInt(0x100000000)).state
+    else if (room.rules === 'stone-skills') room.skills = startSkillGame(room.mode, players, null, 0, drawCard()).state
     else room.game = startGame(room.mode, players).state
     for (const m of room.members) { m.ready = false; m.results.clear() }
     room.revision++
   }
   function destroy(room) {
     clearTimeout(room.expiry)
+    clearTimeout(room.defenseTimer)
     rooms.delete(room.id)
     for (const m of room.members) { tokens.delete(m.token); m.ws?.close(4003, 'Room expired') }
   }
@@ -97,7 +125,7 @@ export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600
         } else if (msg.type === 'create' || msg.type === 'join') {
           if (msg.type === 'create') {
             if (rooms.size >= 100) { fail('SERVER_FULL'); return }
-            if (!['five-in-a-row', 'six-in-a-row'].includes(msg.mode) || !['basic', 'skills'].includes(msg.rules)) { fail('INVALID_SETTINGS'); return }
+            if (!['five-in-a-row', 'six-in-a-row'].includes(msg.mode) || !['basic', 'skills', 'stone-skills'].includes(msg.rules)) { fail('INVALID_SETTINGS'); return }
             room = { id: randomUUID(), mode: msg.mode, rules: msg.rules, gameId: '', revision: 0, game: null, skills: null, members: [] }
             rooms.set(room.id, room)
           } else room = typeof msg.roomId === 'string' ? rooms.get(msg.roomId) : null
@@ -109,10 +137,12 @@ export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600
           if (room.members.length === 2) begin(room)
         } else { fail('NOT_JOINED'); return }
         send(ws, { type: 'session', token: member.token, roomId: room.id })
-        broadcast(room)
+        if (!settleDefense(room, Date.now())) broadcast(room)
         return
       }
       if (member.ws !== ws) { fail('SESSION_REPLACED'); return }
+      const time = Date.now()
+      settleDefense(room, time)
       if (msg.type === 'sync') { send(ws, snapshot(room, member)); return }
       if (msg.type === 'leave') { destroy(room); return }
       if (msg.type !== 'command') { fail('INVALID_MESSAGE'); return }
@@ -141,16 +171,26 @@ export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600
         if (action.type === 'place-stone' && action.position && Number.isInteger(action.position.row) && Number.isInteger(action.position.column)) {
           command = { type: action.type, actorId: member.id, position: { row: action.position.row, column: action.position.column } }
         } else if (action.type === 'use-skill' && Number.isSafeInteger(action.cardId)) {
-          command = { type: action.type, actorId: member.id, cardId: action.cardId, targetId: room.members.find((m) => m !== member).id }
-        } else if (action.type === 'respond' && Number.isSafeInteger(action.attackId) && (action.cardId === undefined || Number.isSafeInteger(action.cardId))) {
-          command = { type: action.type, actorId: member.id, attackId: action.attackId, cardId: action.cardId }
+          const point = action.position
+          if (point === undefined || (point && Number.isInteger(point.row) && Number.isInteger(point.column))) {
+            command = { type: action.type, actorId: member.id, cardId: action.cardId, targetId: room.members.find((m) => m !== member).id,
+              position: point && { row: point.row, column: point.column } }
+          }
+        } else if (action.type === 'respond' && Number.isSafeInteger(action.attackId) &&
+          (action.cardId === undefined || Number.isSafeInteger(action.cardId)) &&
+          (action.discardCardId === undefined || Number.isSafeInteger(action.discardCardId))) {
+          command = { type: action.type, actorId: member.id, attackId: action.attackId, cardId: action.cardId, discardCardId: action.discardCardId }
         }
         if (!command || (!room.skills && command.type !== 'place-stone')) result.code = 'INVALID_ACTION'
         else {
-          const transition = room.skills ? applySkillCommand(room.skills, command) : applyCommand(room.game, command)
+          const drawIndex = room.rules === 'stone-skills' && command.type === 'place-stone' ? drawCard() : undefined
+          const transition = room.skills ? applySkillCommand(room.skills, command, time, drawIndex) : applyCommand(room.game, command)
           if (!transition.ok) result.code = transition.reason
           else {
-            if (room.skills) room.skills = transition.state
+            if (room.skills) {
+              room.skills = transition.state
+              scheduleDefense(room)
+            }
             else room.game = transition.state
             room.revision++
             result.ok = true
@@ -166,7 +206,7 @@ export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600
       if (!member || member.ws !== ws || !rooms.has(room.id)) return
       member.ws = null
       broadcast(room)
-      // Technical retention only: no game-forfeit or defense-timeout policy.
+      // Room retention is separate from the pending defense timer.
       if (room.members.every((m) => !m.ws)) {
         clearTimeout(room.expiry)
         room.expiry = setTimeout(() => destroy(room), graceMs)

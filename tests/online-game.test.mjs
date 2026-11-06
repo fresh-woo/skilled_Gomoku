@@ -12,8 +12,8 @@ async function client(url) {
   return {
     socket,
     send(message) { const requestId = message.requestId ?? crypto.randomUUID(); socket.send(JSON.stringify({ v: 1, ...message, requestId })); return requestId },
-    async next(type, predicate = () => true) {
-      const deadline = Date.now() + 2500
+    async next(type, predicate = () => true, timeout = 2500) {
+      const deadline = Date.now() + timeout
       while (Date.now() < deadline) {
         const index = messages.findIndex((m) => m.type === type && predicate(m))
         if (index >= 0) return messages.splice(index, 1)[0]
@@ -24,6 +24,85 @@ async function client(url) {
     async close() { const closed = once(socket, 'close'); socket.close(); await closed },
   }
 }
+
+test('online snipe keeps a private, idempotent defense across reconnect and resolves without a defender', { timeout: 25000 }, async (t) => {
+  const draws = [0, 1, 0, 2, 0]
+  const ctx = await setup(t, 'five-in-a-row', 'stone-skills', { drawCard: () => draws.shift() ?? 0 })
+  let view = ctx.view
+  const [first, second] = view.game.players.map(({ id }) => id)
+  const attacker = first === 'black' ? ctx.a : ctx.b
+  const defender = first === 'black' ? ctx.b : ctx.a
+  const defenderToken = (defender === ctx.a ? ctx.sessionA : ctx.sessionB).token
+  const target = { row: 2, column: 0 }
+  for (const [actor, row, column] of [[attacker, 0, 0], [defender, 2, 0], [attacker, 0, 1], [defender, 2, 1]]) {
+    const move = await command(actor, view, { type: 'place-stone', position: { row, column } })
+    assert.equal(move.result.ok, true)
+    view = move.view
+  }
+  view = await attacker.next('snapshot', (m) => m.revision === view.revision)
+  const cardId = view.skills.hands[first][0].id
+  const badTarget = await command(attacker, view, { type: 'use-skill', cardId, position: { row: 0, column: 0 } })
+  assert.equal(badTarget.result.code, 'invalid-target')
+  const snipe = await command(attacker, view, { type: 'use-skill', cardId, position: target })
+  assert.equal(snipe.result.ok, true)
+  view = snipe.view
+  const pending = view.skills.response
+  assert.equal(pending.phase, 'snipe')
+  assert.deepEqual(pending.position, target)
+  assert.equal(pending.targetId, second)
+  assert.equal(view.skills.hands[second], undefined)
+  for (const privateKey of ['drawPile', 'randomSeed', 'effects', 'nextDraw']) assert.equal(view.skills[privateKey], undefined)
+
+  await defender.close()
+  await attacker.next('snapshot', (m) => m.members.some((member) => member.id === second && !member.connected))
+  const resumed = await client(ctx.url)
+  resumed.send({ type: 'resume', token: defenderToken })
+  await resumed.next('session')
+  const restored = await resumed.next('snapshot')
+  assert.deepEqual(restored.skills.response, pending)
+  assert.equal(restored.skills.hands[first], undefined)
+  const [nullify, cost] = restored.skills.hands[second]
+  assert.deepEqual([nullify.skill.kind, cost.skill.kind], ['nullify', 'shield'])
+
+  const response = { type: 'respond', attackId: pending.id, cardId: nullify.id }
+  const missing = await command(resumed, restored, response)
+  assert.equal(missing.result.code, 'invalid-nullify-cost')
+  const cancelAction = { ...response, discardCardId: cost.id }
+  const canceled = await command(resumed, restored, cancelAction)
+  assert.equal(canceled.result.ok, true)
+  const retry = await command(resumed, restored, cancelAction, { requestId: canceled.requestId })
+  assert.deepEqual(retry.result, canceled.result)
+  assert.equal(retry.view.handCounts[second], 0)
+  assert.equal(retry.view.skills.snipeOutcome, 'nullified')
+  assert.deepEqual(retry.view.game.turn, view.game.turn)
+  assert.equal(retry.view.game.board.cells[2][0].ownerId, second)
+  const attackView = await attacker.next('snapshot', (m) => m.revision === canceled.view.revision)
+  assert.equal(attackView.skills.hands[second], undefined)
+  assert.equal(JSON.stringify(attackView).includes('discardCardId'), false)
+
+  const place = await command(attacker, attackView, { type: 'place-stone', position: { row: 0, column: 2 } })
+  assert.equal(place.result.ok, true)
+  const nextTurn = await command(resumed, place.view, { type: 'place-stone', position: { row: 2, column: 2 } })
+  assert.equal(nextTurn.result.ok, true)
+  const nextAttackView = await attacker.next('snapshot', (m) => m.revision === nextTurn.view.revision)
+  const nextSnipe = await command(attacker, nextAttackView, {
+    type: 'use-skill', cardId: nextAttackView.skills.hands[first][0].id, position: target,
+  })
+  assert.equal(nextSnipe.result.ok, true)
+  await resumed.close()
+  const timedOut = await attacker.next('snapshot', (m) => m.skills?.snipeOutcome === 'destroyed', 17_000)
+  assert.equal(timedOut.revision, nextSnipe.view.revision + 1)
+  assert.equal(timedOut.skills.response, null)
+  assert.equal(timedOut.game.board.cells[2][0], null)
+  assert.deepEqual(timedOut.game.turn, nextSnipe.view.game.turn)
+  const later = await client(ctx.url)
+  later.send({ type: 'resume', token: defenderToken })
+  await later.next('session')
+  const postTimeout = await later.next('snapshot')
+  assert.equal(postTimeout.revision, timedOut.revision)
+  assert.deepEqual(postTimeout.game, timedOut.game)
+  assert.equal(postTimeout.skills.hands[second].length, nextTurn.view.skills.hands[second].length)
+})
 async function setup(t, mode = 'five-in-a-row', rules = 'basic', options = {}) {
   const server = createOnlineServer(options)
   await once(server.http, 'listening')
