@@ -1,5 +1,5 @@
 .skill-card-picker { min-inline-size: 0; margin: 0; padding: 0; border: 0; }
-.skill-card-picker legend { margin-block-end: .65rem; color: var(--color-muted); font-size: .8rem; }
+.skill-card-picker legend { margin-block-end: .65rem; color: var(--color-muted); font-size: .875rem; }
 .skill-card-picker__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 9rem), 1fr)); gap: .85rem; }
 .play-skill-card { --card-glow: #b79aff; position: relative; min-inline-size: 0; inline-size: 100%; border: 1px solid #b79aff80; border-radius: .65rem; color: #e8edff; background: radial-gradient(ellipse at 50% 30%, #2c244c80, transparent 75%), #10192b; box-shadow: inset 0 0 25px #b79aff06, 0 8px 20px #0003; }
 .play-skill-card[data-kind='방어'] { --card-glow: #51f5dc; border-color: #51f5dc70; background: radial-gradient(ellipse at 50% 30%, #173c4180, transparent 75%), #10192b; }
@@ -8,15 +8,15 @@
 .play-skill-card__face > input { position: absolute; inset-inline-start: .7rem; inset-block-start: .75rem; margin: 0; accent-color: var(--card-glow); }
 .play-skill-card__art { inline-size: min(75%, 7rem); block-size: 7rem; flex: none; color: var(--card-glow); filter: drop-shadow(0 0 8px color-mix(in srgb, var(--card-glow), transparent 75%)); }
 .play-skill-card__title { font-size: .95rem; font-weight: 600; text-align: center; letter-spacing: .04em; }
-.play-skill-card__owner { position: absolute; inset-inline-start: .7rem; inset-block-end: .5rem; display: flex; align-items: center; gap: .3rem; font-size: .65rem; color: #a1aec5; }
+.play-skill-card__owner { position: absolute; inset-inline-start: .7rem; inset-block-end: .5rem; display: flex; align-items: center; gap: .3rem; font-size: .8125rem; color: var(--color-muted); }
 .play-skill-card__owner i { inline-size: .5rem; block-size: .5rem; border-radius: 50%; background: #060d19; border: 1px solid #7c8aa3; }
 .play-skill-card[data-side='white'] .play-skill-card__owner i { background: #eef5ff; }
-.play-skill-card__count { position: absolute; inset-inline-end: .7rem; inset-block-end: .5rem; color: #a1aec5; font-size: .7rem; }
+.play-skill-card__count { position: absolute; inset-inline-end: .7rem; inset-block-end: .5rem; color: var(--color-muted); font-size: .8125rem; }
 .play-skill-card__info { position: absolute; inset-inline-end: .3rem; inset-block-start: .3rem; inline-size: 2rem; block-size: 2rem; border: 0; border-radius: 50%; color: var(--card-glow); background: transparent; font: italic 700 .875rem Georgia, serif; cursor: pointer; z-index: 3; }
 .play-skill-card__info:hover, .play-skill-card__info[aria-expanded='true'] { background: #ffffff12; }
-.play-skill-card__copy:not([hidden]) { position: absolute; inset: 2.5rem .4rem 1.4rem; display: flex; flex-direction: column; justify-content: center; gap: .65rem; padding: .7rem; border: 1px solid color-mix(in srgb, var(--card-glow), transparent 75%); border-radius: .4rem; background: #10192bf5; color: #dbe4f5; font-size: .78rem; line-height: 1.65; overflow: auto; z-index: 2; overflow-wrap: anywhere; }
-.play-skill-card__copy b { color: var(--card-glow); font-size: .7rem; }
-.play-skill-card__copy small { color: #afbbd1; border-block-start: 1px solid #ffffff20; padding-block-start: .5rem; }
+.play-skill-card__copy:not([hidden]) { position: absolute; inset: 2.5rem .4rem 1.4rem; display: flex; flex-direction: column; justify-content: start; gap: .65rem; padding: .7rem; border: 1px solid color-mix(in srgb, var(--card-glow), transparent 75%); border-radius: .4rem; background: #10192bf5; color: var(--color-text); font-size: .9375rem; line-height: 1.5; overflow: auto; z-index: 2; overflow-wrap: anywhere; }
+.play-skill-card__copy b { color: var(--card-glow); font-size: .8125rem; }
+.play-skill-card__copy small { color: var(--color-muted); border-block-start: 1px solid #ffffff20; padding-block-start: .5rem; }
 .play-skill-card:focus-visible, .play-skill-card:has(input:focus-visible) { outline: 2px solid var(--card-glow); outline-offset: 3px; }
 .play-skill-card:has(input:checked) { box-shadow: 0 0 0 2px var(--card-glow), 0 0 25px color-mix(in srgb, var(--card-glow), transparent 80%); }
 .play-skill-card[data-unavailable='true'] .play-skill-card__title { color: #a2afc6; }

@@ -6,12 +6,13 @@ import './game-ui.css'
 type ModalProps = {
   title: string
   description?: string
+  tone?: 'victory'
   children: ReactNode
   actions?: ReactNode
   onDismiss: () => void
 }
 
-export function Modal({ title, description, children, actions, onDismiss }: ModalProps) {
+export function Modal({ title, description, tone, children, actions, onDismiss }: ModalProps) {
   const dialog = useRef<HTMLDialogElement>(null)
   const id = useId()
 
@@ -30,12 +31,19 @@ export function Modal({ title, description, children, actions, onDismiss }: Moda
     <dialog
       ref={dialog}
       className="game-modal"
+      data-tone={tone}
       aria-labelledby={id}
       aria-describedby={description ? `${id}-description` : undefined}
       onCancel={(event) => { event.preventDefault(); onDismiss() }}
     >
       <header className="game-modal__header">
-        <div>
+        <div className="game-modal__heading">
+          {tone === 'victory' && (
+            <svg className="game-modal__trophy" aria-hidden="true" width="48" height="48" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M7 3h10v5a5 5 0 0 1-10 0V3ZM7 5H3v2a4 4 0 0 0 4 4m10-6h4v2a4 4 0 0 1-4 4m-5 2v5m-4 3h8m-7 0v-1a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v1" />
+            </svg>
+          )}
           <h2 id={id}>{title}</h2>
           {description && <p id={`${id}-description`}>{description}</p>}
         </div>
