@@ -2,8 +2,10 @@ import { MenuNavigation } from './design-system/MenuNavigation'
 import { LocalGame } from './features/local-game/ui/LocalGame'
 import { OnlineGame } from './features/online-game/OnlineGame'
 import { SoundControl } from './features/game-sound/SoundControl'
+import { Lobby } from './features/lobby/Lobby'
 import './design-system/tokens.css'
 import './App.css'
+import './design-system/neon-game.css'
 
 const navigationItems = [
   { href: '#welcome', label: '시작 화면' },
@@ -32,12 +34,11 @@ function App() {
         </div>
       </header>
       <main>
-        <div className="welcome" id="welcome" tabIndex={-1}>
-          <h1>함께 두는 오목</h1>
-          <p className="welcome__intro">한 화면에서 두 사람이 번갈아 돌을 놓습니다.</p>
+        <Lobby />
+        <div className="game-hub">
+          <OnlineGame />
+          <LocalGame />
         </div>
-        <OnlineGame />
-        <LocalGame />
       </main>
     </>
   )

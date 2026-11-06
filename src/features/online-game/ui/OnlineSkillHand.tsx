@@ -6,15 +6,13 @@ import type { SkillCardOption } from '../../../design-system/SkillCardPicker'
 import type { StoneColor } from '../../../design-system/board-model'
 import type { SkillView } from '../../../entities/game/model/skillGameView'
 import { skillCards } from '../../skill-catalog/cards'
-import blackArt from '../../local-game/assets/skills-black.jpg'
-import whiteArt from '../../local-game/assets/skills-white.jpg'
 
 type Card = SkillView['hands'][string][number]
 type Phase = NonNullable<SkillView['response']>['phase']
 export type SelectedStoneSkill = { kind: 'snipe' | 'shield'; cardId: number }
 type HandAction = { type: 'card'; cardId: number; discardCardId?: number } | { type: 'pass' }
 
-function cardOption({ id, skill }: Card, phase: Phase | undefined, artSrc: string): Omit<SkillCardOption, 'count'> {
+function cardOption({ id, skill }: Card, phase: Phase | undefined): Omit<SkillCardOption, 'count'> {
   switch (skill.kind) {
     case 'discard':
       return {
@@ -22,7 +20,7 @@ function cardOption({ id, skill }: Card, phase: Phase | undefined, artSrc: strin
         title: '무장해제',
         timing: skill.response === 'before' ? '적용 전 응답' : '적용 후 응답',
         kind: '공격',
-        art: { src: artSrc, position: 'left' },
+        artwork: 'disarm',
         description: '상대 손패에서 무작위로 카드 1장을 버리게 해요.',
         unavailable: phase ? '방어 응답 중에는 사용할 수 없어요.' : undefined,
       }
@@ -31,18 +29,16 @@ function cardOption({ id, skill }: Card, phase: Phase | undefined, artSrc: strin
         id: String(id),
         title: '무장해제 무효화',
         kind: '방어',
-        art: { src: artSrc, position: 'center' },
         description: '상대의 무장해제가 적용되기 전에 막아요.',
-        unavailable: phase !== 'before' ? '공격 적용 전에 사용할 수 있어요.' : undefined,
+        unavailable: 'PDF에 없는 카드로 사용을 보류했어요.',
       }
     case 'recover':
       return {
         id: String(id),
         title: '손패 복구',
         kind: '방어',
-        art: { src: artSrc, position: 'right' },
         description: '방금 버려진 카드를 손패로 돌려받아요.',
-        unavailable: phase !== 'after' ? '공격 적용 후에 사용할 수 있어요.' : undefined,
+        unavailable: 'PDF에 없는 카드로 사용을 보류했어요.',
       }
     case 'snipe':
     case 'shield':
@@ -69,14 +65,13 @@ function PlayableSkillCards({ hand, side, phase, used, onAction, onTarget }: {
   const name = useId()
   const [choice, setChoice] = useState('')
   const [cost, setCost] = useState('')
-  const artSrc = side === 'black' ? blackArt : whiteArt
   const groups = new Map<string, SkillCardOption>()
   for (const card of hand) {
     const key = card.skill.kind === 'discard' ? `discard-${card.skill.response}` : card.skill.kind
     const group = groups.get(key)
     if (group) group.count += 1
     else {
-      const option = cardOption(card, phase, artSrc)
+      const option = cardOption(card, phase)
       if (card.skill.kind === 'nullify' && phase === 'snipe' && hand.length < 2) {
         option.unavailable = '버릴 카드 1장이 더 필요해요.'
       }
@@ -118,14 +113,14 @@ function PlayableSkillCards({ hand, side, phase, used, onAction, onTarget }: {
         버릴 카드 1장 선택{' '}
         <select value={cost} onChange={(event) => setCost(event.target.value)}>
           <option value="">카드 선택</option>
-          {costCards.map((card) => <option key={card.id} value={card.id}>{cardOption(card, phase, artSrc).title}</option>)}
+          {costCards.map((card) => <option key={card.id} value={card.id}>{cardOption(card, phase).title}</option>)}
         </select>
       </label>}
       <div className="local-game__actions">
         <Button disabled={!selected || (choosingCost && !validCost)} onClick={() => { if (selected) playSelectedCard(Number(selected.id)) }}>
           {choosingCost ? '카드를 버리고 무효화' : (selectedKind === 'snipe' || selectedKind === 'shield') ? '판에서 대상 선택' : '선택한 카드 사용'}
         </Button>
-        {phase && <Button variant="secondary" onClick={() => act({ type: 'pass' })}>방어하지 않기</Button>}
+        {phase && <Button variant="secondary" onClick={() => act({ type: 'pass' })}>{phase === 'snipe' ? '방어하지 않기' : '확인하고 계속'}</Button>}
       </div>
     </>
   )

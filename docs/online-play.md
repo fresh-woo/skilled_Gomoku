@@ -38,7 +38,7 @@ npm run server
 
 ## 규칙과 서버 경계
 
-`server/index.mjs`는 Node 24의 TypeScript 지원으로 `game.ts`의 `startGame/applyCommand`, `skillGame.ts`의 `startSkillGame/applySkillCommand`를 호출한다. 온라인 스킬 대국은 매 턴 시작에 일곱 카드 중 한 장을 같은 확률로 지급한다. 무장해제의 적용 전·후 응답은 방어자가 응답하거나 건너뛸 때까지 유지한다.
+`server/index.mjs`는 Node 24의 TypeScript 지원으로 `game.ts`의 `startGame/applyCommand`, `skillGame.ts`의 `startSkillGame/applySkillCommand`를 호출한다. 온라인 지급은 PDF와 구현이 겹치는 저격·무효화·보호막·무장해제로 제한한다. 무장해제의 두 응답 시점을 포함한 5개 항목이 각각 1/5 확률이며, PDF에 없는 무장해제 무효화·손패 복구는 지급하지 않는다. 무장해제의 적용 전·후 응답은 대상 플레이어가 확인할 때까지 유지한다.
 
 서버는 세션에서 행동자를 정하고 허용된 action 필드만 추출한다. 클라이언트가 보낸 actorId·대상 신원·완성 판은 사용하지 않는다. 플레이어별 스냅샷에는 공개 game, 본인 손패, 양쪽의 손패 수, 방어 대상·마감·결과와 보호막이 포함된다. 상대 손패와 버린 카드 상세·덱·난수·예약 효과는 직렬화하지 않는다. 이후 지뢰·은신 등 비공개 판 상태를 도입할 때는 이 공개 game 투영도 확장해야 한다.
 

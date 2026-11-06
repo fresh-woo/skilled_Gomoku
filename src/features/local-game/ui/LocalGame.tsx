@@ -51,7 +51,9 @@ export function LocalGame() {
   return (
     <section aria-labelledby="local-game-title" className="local-game" id="local-game">
       <div className="local-game__setup">
+        <span className="game-setup__eyebrow">02 / LOCAL MATCH</span>
         <h2 id="local-game-title">로컬 2인 대국</h2>
+        <p>한 화면에서 번갈아 두는 오목. 옆자리 친구와 바로 시작하세요.</p>
         <GameChoices
           name="local-game-mode"
           legend={game ? '새 대국 모드' : '승리 모드'}

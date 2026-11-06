@@ -13,8 +13,9 @@ type Skill =
 
 const onlineSkills: readonly Skill[] = [
   { kind: 'snipe' }, { kind: 'nullify' }, { kind: 'shield' },
-  { kind: 'discard', response: 'before' }, { kind: 'cancel' },
-  { kind: 'recover' }, { kind: 'discard', response: 'after' },
+  // PDF-backed, implemented cards only. Keep both existing disarm response timings.
+  // Dedicated disarm cancel / hand recovery remain engine fixtures, not live draws.
+  { kind: 'discard', response: 'before' }, { kind: 'discard', response: 'after' },
 ]
 export const ONLINE_SKILL_COUNT = onlineSkills.length
 const fairDrawLimit = 0x100000000 - (0x100000000 % ONLINE_SKILL_COUNT)

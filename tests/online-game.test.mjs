@@ -48,6 +48,8 @@ test('online snipe keeps a private, idempotent defense across reconnect and reso
   assert.equal(badTarget.result.code, 'invalid-target')
   const snipe = await command(attacker, view, { type: 'use-skill', cardId, position: target })
   assert.equal(snipe.result.ok, true)
+  assert.deepEqual((await attacker.next('sound', (m) => m.revision === snipe.view.revision)).cues, ['skill'])
+  assert.deepEqual((await defender.next('sound', (m) => m.revision === snipe.view.revision)).cues, ['skill'])
   view = snipe.view
   const pending = view.skills.response
   assert.equal(pending.phase, 'snipe')
@@ -73,6 +75,7 @@ test('online snipe keeps a private, idempotent defense across reconnect and reso
   const cancelAction = { ...response, discardCardId: cost.id }
   const canceled = await command(resumed, restored, cancelAction)
   assert.equal(canceled.result.ok, true)
+  assert.deepEqual((await resumed.next('sound', (m) => m.revision === canceled.view.revision)).cues, ['skill'])
   const retry = await command(resumed, restored, cancelAction, { requestId: canceled.requestId })
   assert.deepEqual(retry.result, canceled.result)
   assert.equal(retry.view.handCounts[second], 0)
@@ -208,9 +211,9 @@ test('authority, idempotency, revision race, room capacity, resume and fencing',
   assert.equal((await third.next('error')).code, 'SESSION_EXPIRED')
 })
 
-test('skill play, private projection, defense and resume do not redraw', { timeout: 15000 }, async (t) => {
-  const draws = [3, 3, 4, 4, 5]
-  const ctx = await setup(t, 'five-in-a-row', 'skills', { drawCard: () => draws.shift() ?? 6 })
+test('PDF skill pool, private projection, disarm pass and resume do not redraw', { timeout: 15000 }, async (t) => {
+  const draws = [3, 4, 2, 0, 1]
+  const ctx = await setup(t, 'five-in-a-row', 'skills', { drawCard: () => draws.shift() ?? 4 })
   let view = ctx.view
   const firstId = view.game.players[0].id
   const first = firstId === 'black' ? ctx.a : ctx.b
@@ -242,10 +245,15 @@ test('skill play, private projection, defense and resume do not redraw', { timeo
   assert.equal(rejected.result.code, 'response-pending')
   second.send({ type: 'sync' })
   const defenseView = await second.next('snapshot', (m) => m.revision === view.revision && !!m.skills.response)
-  const defense = defenseView.skills.hands[secondId].find((c) => c.skill.kind === 'cancel')
-  view = (await command(second, view, { type: 'respond', attackId: view.skills.response.id, cardId: defense.id })).view
-  assert.deepEqual((await second.next('sound', (message) => message.revision === view.revision)).cues, ['skill'])
+  for (const ownView of [view, defenseView]) {
+    const hand = ownView.skills.hands[ownView.playerId]
+    assert.ok(hand.every(({ skill }) => !['cancel', 'recover', 'guard', 'delay'].includes(skill.kind)))
+  }
+  const secondHandSize = defenseView.skills.hands[secondId].length
+  view = (await command(second, view, { type: 'respond', attackId: view.skills.response.id })).view
   assert.equal(view.skills.response, null)
+  assert.equal(view.handCounts[secondId], secondHandSize - 1)
+  assert.equal(second.sounds().some((m) => m.revision === view.revision), false)
   assert.equal(view.game.players[view.game.turn.activeSeat].id, firstId)
   checkPrivacy(view)
   const token = second === ctx.a ? ctx.sessionA.token : ctx.sessionB.token

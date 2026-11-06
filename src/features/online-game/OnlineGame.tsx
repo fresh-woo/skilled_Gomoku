@@ -132,6 +132,7 @@ export function OnlineGame() {
 
   return <section className="local-game" id="online-game" aria-labelledby="online-title">
     <div className="local-game__setup">
+      <span className="game-setup__eyebrow">01 / ONLINE MATCH</span>
       <h2 id="online-title">온라인 2인 대국</h2>
       <p>같은 방 코드로 참가하면 두 사람이 각자의 화면에서 플레이해요.</p>
       {!entry && !view && <>
@@ -140,8 +141,8 @@ export function OnlineGame() {
         ]} />
         <GameChoices name="online-rules" legend="온라인 대국 규칙" value={rules} onChange={setRules} options={onlineRules} />
         <Button onClick={() => { setError(''); setEntry({ type: 'create', mode, rules }) }}>온라인 방 만들기</Button>
-        <form onSubmit={(e) => { e.preventDefault(); setError(''); setEntry({ type: 'join', roomId: code.trim() }) }}>
-          <label>방 코드 <input value={code} onChange={(e) => setCode(e.target.value)} required maxLength={80} /></label>
+        <form className="game-join" onSubmit={(e) => { e.preventDefault(); setError(''); setEntry({ type: 'join', roomId: code.trim() }) }}>
+          <label>친구의 방에 참가 <input placeholder="방 코드를 입력하세요" value={code} onChange={(e) => setCode(e.target.value)} required maxLength={80} /></label>
           <Button type="submit" disabled={!code.trim()}>방 참가</Button>
         </form>
       </>}
@@ -168,7 +169,7 @@ export function OnlineGame() {
             <div>
               {!connected ? '다시 연결하는 중이에요.'
                 : busy ? '행동을 처리하고 있어요.'
-                : canDefend ? <>방어 응답 가능 · <a href="#online-skill-hand">손패로 이동</a></>
+                : canDefend ? <>{response?.phase === 'snipe' ? '방어 응답 가능' : '무장해제 확인 필요'} · <a href="#online-skill-hand">손패로 이동</a></>
                 : response ? '상대의 방어 응답을 기다려 주세요.'
                 : target ? '판에서 카드의 대상을 고르세요.'
                 : myTurn ? '판에서 돌을 놓을 수 있어요.'
@@ -183,8 +184,8 @@ export function OnlineGame() {
       {view?.skills && <div className="local-game__hands" id="online-skill-hand" tabIndex={-1}>
         {error && <GameNotice tone="error" alert>{error}</GameNotice>}
         {response?.phase === 'snipe' && <SnipeNotice position={response.position} deadline={response.deadline - view.serverTime + view.receivedAt} />}
-        {response?.phase === 'before' && <GameNotice>무장해제 적용 전에 방어할 수 있어요.</GameNotice>}
-        {response?.phase === 'after' && <GameNotice>무장해제로 버린 카드를 복구할 수 있어요.</GameNotice>}
+        {response?.phase === 'before' && <GameNotice>무장해제로 카드 1장을 버립니다. ‘확인하고 계속’을 눌러 진행하세요.</GameNotice>}
+        {response?.phase === 'after' && <GameNotice>무장해제로 카드 1장을 버렸어요. ‘확인하고 계속’을 눌러 진행하세요.</GameNotice>}
         {view.skills.snipeOutcome && <SnipeOutcome outcome={view.skills.snipeOutcome} />}
         <p>상대 손패 {Object.entries(view.handCounts).find(([id]) => id !== view.playerId)?.[1] ?? 0}장</p>
         <fieldset disabled={!canAct}>

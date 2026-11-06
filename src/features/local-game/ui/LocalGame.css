@@ -73,6 +73,9 @@
 .local-game__hands > fieldset { min-inline-size: 0; margin: 0; padding: 0; border: 0; }
 
 @media (width < 44rem) {
+  .local-game__skills .skill-card-picker__grid {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 8.5rem), 1fr));
+  }
   .local-game__card-list {
     block-size: clamp(13rem, 44dvh, 21rem);
     overflow: auto;
@@ -91,7 +94,7 @@
     align-items: start;
   }
   .local-game__skills .skill-card-picker__grid {
-    grid-template-columns: repeat(auto-fill, minmax(min(100%, 7.75rem), 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 9rem), 1fr));
     max-block-size: max(17rem, 58vh);
     overflow: auto;
     padding: var(--space-1);

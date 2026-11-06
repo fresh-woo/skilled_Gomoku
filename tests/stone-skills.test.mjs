@@ -126,18 +126,17 @@ for (const [mode, length] of [['five-in-a-row', 5], ['six-in-a-row', 6]]) {
   })
 }
 
-test('online mode can draw each of the seven cards and grants one per turn', () => {
+test('online draws only implemented PDF cards and keeps one grant per turn', () => {
   const draw = (index) => startSkillGame('five-in-a-row', ['a', 'b'], null, 0, index).state
   const skills = Array.from({ length: ONLINE_SKILL_COUNT }, (_, index) => draw(index).hands.a[0].skill)
   assert.deepEqual(skills, [
     { kind: 'snipe' }, { kind: 'nullify' }, { kind: 'shield' },
-    { kind: 'discard', response: 'before' }, { kind: 'cancel' },
-    { kind: 'recover' }, { kind: 'discard', response: 'after' },
+    { kind: 'discard', response: 'before' }, { kind: 'discard', response: 'after' },
   ])
   const first = draw(0)
   assert.equal(first.hands.a.length, 1)
   assert.equal(first.hands.b.length, 0)
   const moved = applySkillCommand(first, place('a', point(0)), 1_000, 4).state
   assert.deepEqual(moved.hands.a, first.hands.a)
-  assert.deepEqual(moved.hands.b, [{ id: 1, skill: { kind: 'cancel' } }])
+  assert.deepEqual(moved.hands.b, [{ id: 1, skill: { kind: 'discard', response: 'after' } }])
 })
