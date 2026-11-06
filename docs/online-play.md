@@ -2,6 +2,8 @@
 
 ## 실행
 
+공개 시험 서버: [온라인 대국 열기](https://skilled-gomoku.onrender.com/#online-game). 두 플레이어가 이 주소로 접속해 방 코드를 공유한다. 배포/운영 설정은 [GitHub와 Render 운영 방법](github-and-deployment.md)을 참고한다.
+
 Node.js 24를 사용한다. 같은 저장소에서:
 
 ```sh
@@ -23,7 +25,7 @@ npm run server
 
 상대는 서버 PC의 LAN 주소 `http://<PC의 LAN IP>:8787/#online-game`으로 접속한다. `127.0.0.1` 주소는 상대 기기에서 사용할 수 없다. 운영체제 방화벽과 Wi-Fi의 기기 간 접근 설정이 연결을 허용해야 한다. 개발 중 LAN 확인은 `npm run dev:lan`과 별도의 기본 서버로도 가능하다. 이번 검증은 한 PC의 독립된 브라우저 두 탭에서 수행했으며 실제 두 기기 간 네트워크 연결은 미검증이다.
 
-인터넷 서비스는 아직 배포하지 않았다. 실행 환경을 정하면 Node 서버에 `PORT`, `HOST`를 설정하고 HTTPS 종료와 `/online` WebSocket upgrade 전달을 지원하는 프록시/호스트를 사용한다. 같은 Origin에서 화면과 소켓을 제공하는 구성이 기본이다. 프록시가 Host를 변경하면 `ALLOWED_ORIGINS`에 실제 화면의 정확한 Origin을 쉼표로 나열한다. 와일드카드 허용은 구현하지 않았다. 공급자·DB는 이번 변경에서 선택하지 않았다.
+인터넷 시험 서비스는 Render 무료 웹 서비스에 배포했다. 같은 Origin에서 화면과 소켓을 제공한다. 다른 실행 환경을 사용하면 Node 서버에 `PORT`, `HOST`를 설정하고 HTTPS 종료와 `/online` WebSocket upgrade 전달을 지원하는 호스트를 사용한다. Render의 공개 Origin은 `RENDER_EXTERNAL_URL`로 허용하며, 별도 도메인은 `ALLOWED_ORIGINS`에 정확한 Origin을 쉼표로 나열한다. 와일드카드 허용과 DB는 추가하지 않았다.
 
 ## 동작과 복구 범위
 
