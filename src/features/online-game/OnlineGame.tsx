@@ -159,6 +159,7 @@ export function OnlineGame() {
 
   return <section className="local-game" id="online-game" aria-labelledby="online-title">
     <div className="local-game__setup">
+      <span className="game-setup__eyebrow">01 / ONLINE MATCH</span>
       <h2 id="online-title">온라인 2인 대국</h2>
       <p>같은 방 코드로 참가하면 두 사람이 각자의 화면에서 플레이해요.</p>
       {!entry && !view && <>
@@ -167,8 +168,8 @@ export function OnlineGame() {
         ]} />
         <GameChoices name="online-rules" legend="온라인 대국 규칙" value={rules} onChange={setRules} options={onlineRules} />
         <Button onClick={() => { setError(''); setEntry({ type: 'create', mode, rules }) }}>온라인 방 만들기</Button>
-        <form onSubmit={(e) => { e.preventDefault(); setError(''); setEntry({ type: 'join', roomId: code.trim() }) }}>
-          <label>방 코드 <input value={code} onChange={(e) => setCode(e.target.value)} required maxLength={80} /></label>
+        <form className="game-join" onSubmit={(e) => { e.preventDefault(); setError(''); setEntry({ type: 'join', roomId: code.trim() }) }}>
+          <label>친구의 방에 참가 <input placeholder="방 코드를 입력하세요" value={code} onChange={(e) => setCode(e.target.value)} required maxLength={80} /></label>
           <Button type="submit" disabled={!code.trim()}>방 참가</Button>
         </form>
       </>}

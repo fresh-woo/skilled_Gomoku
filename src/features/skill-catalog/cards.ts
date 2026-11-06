@@ -1,14 +1,6 @@
 import type { IllustratedSkill } from '../../design-system/SkillCardPicker'
-import atlasA from './assets/catalog-a.jpg'
-import atlasB from './assets/catalog-b.jpg'
-import atlasC from './assets/catalog-c.jpg'
-import atlasD from './assets/catalog-d.jpg'
 
-const atlases = [atlasA, atlasB, atlasC, atlasD]
-const columns = ['left', 'center', 'right'] as const
-const rows = ['top', 'center', 'bottom'] as const
-
-// Keep the row order in sync with the four illustration sheets.
+// Planning definitions are retained below; only implemented PDF cards are displayed.
 const definitions = [
   ["공격","push","밀치기","상대 돌을 8방향 중 선택한 방향으로 한 칸 이동시킵니다."],
   ["공격","snipe","저격","선택한 상대 돌을 파괴합니다."],
@@ -47,10 +39,15 @@ const definitions = [
   ["특수","impound","압수 보관","상대 한 명이 고른 카드 1장과 내 카드 1장을 공개 보관합니다. 각 카드 주인의 다음 턴 종료에 돌려줍니다."],
 ] as const
 
-export const skillCards: IllustratedSkill[] = definitions.map(([kind, id, title, description], index) => ({
-  id,
-  kind,
-  title,
-  description,
-  art: { src: atlases[Math.floor(index / 9)], position: columns[index % 3], row: rows[Math.floor(index / 3) % 3] },
-}))
+const artwork = { snipe: 'snipe', nullify: 'nullify', shield: 'shield', disarm: 'disarm' } as const
+
+export const deferredSkillCards = definitions.filter(([, id]) => !(id in artwork))
+
+export const skillCards: IllustratedSkill[] = definitions.flatMap(([kind, id, title, description]) => {
+  if (!(id in artwork)) return []
+  return [{ id, kind, title,
+    description,
+    timing: id === 'nullify' ? '저격·무장해제 방어' : undefined,
+    artwork: artwork[id as keyof typeof artwork],
+  }]
+})

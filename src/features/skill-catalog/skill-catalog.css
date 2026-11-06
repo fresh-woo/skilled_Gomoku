@@ -13,3 +13,6 @@
 .skill-catalog__total { margin: var(--space-3) 0 var(--space-2); color: var(--color-muted); }
 .skill-card-catalog { margin: 0; padding: 0; list-style: none; }
 .skill-card-catalog .play-skill-card__title { min-block-size: 0; }
+.skill-card-catalog { grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); }
+.skill-catalog__deferred { margin-block-start: var(--space-6); padding-block-start: var(--space-3); border-block-start: 1px solid var(--color-border); color: var(--color-muted); font-size: var(--font-size-small); line-height: 1.7; }
+.skill-catalog__deferred summary { cursor: pointer; font-weight: var(--font-weight-strong); }

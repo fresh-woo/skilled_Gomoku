@@ -6,8 +6,6 @@ import type { SkillCardOption } from '../../../design-system/SkillCardPicker'
 import type { StoneColor } from '../../../design-system/board-model'
 import type { SkillView } from '../../../entities/game/model/skillGameView'
 import { skillCards } from '../../skill-catalog/cards'
-import blackArt from '../../local-game/assets/skills-black.jpg'
-import whiteArt from '../../local-game/assets/skills-white.jpg'
 
 type Card = SkillView['hands'][string][number]
 type Phase = NonNullable<SkillView['response']>['phase']
@@ -24,7 +22,7 @@ const blockedText: Partial<Record<NonNullable<SkillView['cardBlocks'][number]>, 
   'no-skill-target': '판에 선택할 수 있는 대상 돌이 없어요.',
 }
 
-function cardOption({ id, skill }: Card, artSrc: string): Omit<SkillCardOption, 'count'> {
+function cardOption({ id, skill }: Card): Omit<SkillCardOption, 'count'> {
   switch (skill.kind) {
     case 'discard':
       return {
@@ -32,7 +30,7 @@ function cardOption({ id, skill }: Card, artSrc: string): Omit<SkillCardOption, 
         title: '무장해제',
         timing: '적용 전 응답',
         kind: '공격',
-        art: { src: artSrc, position: 'left' },
+        artwork: 'disarm',
         description: '상대 손패에서 무작위로 카드 1장을 버리게 해요.',
       }
     case 'snipe':
@@ -57,14 +55,14 @@ function PlayableSkillCards({ hand, side, phase, cardBlocks, uiBlock, onAction, 
 }) {
   const name = useId()
   const [choice, setChoice] = useState('')
-  const artSrc = side === 'black' ? blackArt : whiteArt
+
   const groups = new Map<string, SkillCardOption>()
   for (const card of hand) {
     const key = card.skill.kind
     const group = groups.get(key)
     if (group) group.count += 1
     else {
-      const option = cardOption(card, artSrc)
+      const option = cardOption(card)
       const reason = cardBlocks[card.id]
       option.unavailable = uiBlock ?? (reason ? blockedText[reason] ?? '지금은 사용할 수 없어요.' : undefined)
       groups.set(key, { ...option, count: 1 })
