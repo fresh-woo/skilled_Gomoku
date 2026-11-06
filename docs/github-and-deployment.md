@@ -20,7 +20,7 @@
 | 배포 소스 | `fresh-woo/skilled_Gomoku`의 `main` |
 | 최초 공개 검증 커밋 | `c69582679fdc2ad4c772c6fa9add9321a3c8ec45` ([PR #4](https://github.com/fresh-woo/skilled_Gomoku/pull/4)) |
 | Node | 24.22.2 |
-| 자동 배포 설정 | `autoDeploy=yes`, `autoDeployTrigger=commit` |
+| 자동 배포 설정 | 메타데이터는 `autoDeploy=yes`, `autoDeployTrigger=commit`. 실제 push 트리거는 아래 검증 결과 참고 |
 | 플랫폼 상태 확인 | 기본 TCP 검사. HTTP `/health`는 별도로 공개 검증 |
 
 최초 배포가 Render에서 `live`가 된 뒤 공개 HTTPS 화면/health와 기본·스킬 WSS 대국의 두 클라이언트 착수 동기화, 손패 분리와 재접속 검증을 통과했다. GitHub main CI와 Render 빌드 안의 lint·테스트 34개·빌드도 성공했다.
@@ -37,7 +37,11 @@
 
 ## 이후 배포 정책
 
-현재 설정은 `작업 브랜치 → PR CI 성공 확인 → main 병합 → Render 자동 빌드·검사 → 배포`다. Render 빌드 명령 안에서도 lint·test·build를 실행하므로 검사 실패 시 새 버전을 배포하지 않는다. Render 자체의 `After CI Checks Pass` 대기 모드와는 다르다.
+목표 흐름은 `작업 브랜치 → PR CI 성공 확인 → main 병합 → Render 빌드·검사 → 배포`다. Render 빌드 명령 안에서도 lint·test·build를 실행하므로 검사 실패 시 새 버전을 배포하지 않는다. Render 자체의 `After CI Checks Pass` 대기 모드와는 다르다.
+
+실제 검증에서는 [PR #5](https://github.com/fresh-woo/skilled_Gomoku/pull/5)를 CI 통과 후 main에 병합했지만 배포 목록에 새로운 Git push 기반 배포가 생성되지 않았다. 메타데이터가 자동 배포로 표시되는 것만으로 자동 반영을 보장하지 않는다. 현재 공개 서비스는 최초의 `c695826` 버전이고, 이후 main 변경은 배포 결과/운영 문서뿐이며 게임 코드는 동일하다.
+
+GitHub 변경을 계속 반영하려면 Render Dashboard에서 Git 공급자·해당 레포 연결과 자동 배포 설정을 확인한다. 연결 완료 전에는 main 병합 후 서비스의 **Manual Deploy → Deploy latest commit**으로 반영하고 `/health` SHA와 공개 검증을 확인한다. 해당 대시보드 설정과 Git 공급자 연결은 아직 미완료다.
 
 CI 대기 모드와 플랫폼의 HTTP `/health` 경로를 설정하려면 위 Render Dashboard의 Settings에서 수정한다. 현재 연결 도구는 해당 설정을 지원하지 않으며 대시보드는 별도 로그인이 필요해 이 두 설정은 변경하지 않았다. 자동 배포 설정 값과 실제 Git push 트리거 결과도 구분해 확인한다. Git 공급자 연결이 없는 공개 URL 기반 서비스는 수동 배포가 필요할 수 있다.
 
