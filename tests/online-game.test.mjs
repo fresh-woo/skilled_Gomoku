@@ -26,9 +26,10 @@ async function client(url) {
 }
 
 test('online snipe keeps a private, idempotent defense across reconnect and resolves without a defender', { timeout: 25000 }, async (t) => {
-  const draws = [0, 1, 0, 2, 0]
+  const draws = [0, 1, 3, 2, 0]
   const ctx = await setup(t, 'five-in-a-row', 'stone-skills', { drawCard: () => draws.shift() ?? 0 })
   let view = ctx.view
+  assert.equal(view.rules, 'skills')
   const [first, second] = view.game.players.map(({ id }) => id)
   const attacker = first === 'black' ? ctx.a : ctx.b
   const defender = first === 'black' ? ctx.b : ctx.a
@@ -86,7 +87,7 @@ test('online snipe keeps a private, idempotent defense across reconnect and reso
   assert.equal(nextTurn.result.ok, true)
   const nextAttackView = await attacker.next('snapshot', (m) => m.revision === nextTurn.view.revision)
   const nextSnipe = await command(attacker, nextAttackView, {
-    type: 'use-skill', cardId: nextAttackView.skills.hands[first][0].id, position: target,
+    type: 'use-skill', cardId: nextAttackView.skills.hands[first].find(({ skill }) => skill.kind === 'snipe').id, position: target,
   })
   assert.equal(nextSnipe.result.ok, true)
   await resumed.close()
@@ -102,6 +103,14 @@ test('online snipe keeps a private, idempotent defense across reconnect and reso
   assert.equal(postTimeout.revision, timedOut.revision)
   assert.deepEqual(postTimeout.game, timedOut.game)
   assert.equal(postTimeout.skills.hands[second].length, nextTurn.view.skills.hands[second].length)
+  const discardCard = timedOut.skills.hands[first].find(({ skill }) => skill.kind === 'discard')
+  const disarm = await command(attacker, timedOut, { type: 'use-skill', cardId: discardCard.id })
+  assert.equal(disarm.view.skills.response.phase, 'before')
+  assert.equal(disarm.view.skills.response.deadline, undefined)
+  assert.equal(disarm.view.skills.snipeOutcome, null)
+  const passed = await command(later, disarm.view, { type: 'respond', attackId: discardCard.id })
+  assert.equal(passed.result.ok, true)
+  assert.equal(passed.view.skills.hands[second].length, 0)
 })
 async function setup(t, mode = 'five-in-a-row', rules = 'basic', options = {}) {
   const server = createOnlineServer(options)
@@ -198,7 +207,8 @@ test('authority, idempotency, revision race, room capacity, resume and fencing',
 })
 
 test('skill play, private projection, defense and resume do not redraw', { timeout: 15000 }, async (t) => {
-  const ctx = await setup(t, 'five-in-a-row', 'skills')
+  const draws = [3, 3, 4, 4, 5]
+  const ctx = await setup(t, 'five-in-a-row', 'skills', { drawCard: () => draws.shift() ?? 6 })
   let view = ctx.view
   const firstId = view.game.players[0].id
   const first = firstId === 'black' ? ctx.a : ctx.b

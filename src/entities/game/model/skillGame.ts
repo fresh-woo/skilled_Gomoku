@@ -11,8 +11,13 @@ type Skill =
   | Readonly<{ kind: 'cancel' | 'recover' }>
   | Readonly<{ kind: 'snipe' | 'nullify' | 'shield' }>
 
-const stoneSkills = [{ kind: 'snipe' }, { kind: 'nullify' }, { kind: 'shield' }] as const
-export const STONE_SKILL_COUNT = stoneSkills.length
+const onlineSkills: readonly Skill[] = [
+  { kind: 'snipe' }, { kind: 'nullify' }, { kind: 'shield' },
+  { kind: 'discard', response: 'before' }, { kind: 'cancel' },
+  { kind: 'recover' }, { kind: 'discard', response: 'after' },
+]
+export const ONLINE_SKILL_COUNT = onlineSkills.length
+const fairDrawLimit = 0x100000000 - (0x100000000 % ONLINE_SKILL_COUNT)
 type TurnSkill = 'snipe' | 'shield'
 export const SNIPE_RESPONSE_MS = 15_000
 const SHIELD_ROUNDS = 4
@@ -109,12 +114,12 @@ function applyTurnStart(state: SkillGame, event: TurnStarted, drawIndex?: number
 
   let randomSeed = next.randomSeed
   if (!next.drawPile && drawIndex === undefined) {
-    // The three card kinds divide the 32-bit range evenly after rejecting its last value.
-    do { randomSeed = roll(randomSeed) } while (randomSeed === 0xffffffff)
+    // Reject the remainder of the 32-bit range before selecting a card by modulo.
+    do { randomSeed = roll(randomSeed) } while (randomSeed >= fairDrawLimit)
   }
   const skill = next.drawPile
     ? next.drawPile[next.nextDraw]
-    : stoneSkills[drawIndex ?? randomSeed % STONE_SKILL_COUNT]
+    : onlineSkills[drawIndex ?? randomSeed % ONLINE_SKILL_COUNT]
   if (!skill) return next
 
   const hand = [...next.hands[event.playerId], { id: next.nextDraw, skill }]
@@ -201,7 +206,7 @@ function playSkill(
     return { ok: false, reason: 'invalid-target' }
   }
 
-  const next = consume(state, actorId, cardId)
+  const next = { ...consume(state, actorId, cardId), snipeOutcome: null }
   const attack = { id: cardId, targetId }
   if (skill.response === 'before') return accept({ ...next, response: { ...attack, phase: 'before' } })
 

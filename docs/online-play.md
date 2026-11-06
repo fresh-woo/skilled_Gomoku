@@ -12,7 +12,7 @@ npm run build
 npm run server
 ```
 
-`http://127.0.0.1:8787/#online-game`을 독립된 두 탭/브라우저에서 연다. 첫 화면의 **온라인 방 만들기**를 누르고 표시된 방 코드를 상대에게 전달한다. 상대는 **방 참가**를 누른다. 두 번째 참가 때 게임이 시작되며 각자 자신의 차례에 조작한다. 방 생성자가 5목·6목과 기본 대국·스킬 대국·스킬 테스트 중에서 선택한다.
+`http://127.0.0.1:8787/#online-game`을 독립된 두 탭/브라우저에서 연다. 첫 화면의 **온라인 방 만들기**를 누르고 표시된 방 코드를 상대에게 전달한다. 상대는 **방 참가**를 누른다. 두 번째 참가 때 게임이 시작된다. 방 생성자가 5목·6목과 기본 대국·스킬 대국 중에서 선택한다. 판 위에서 내 턴과 상대 턴을 확인하고, 방어 응답이 가능하면 손패로 이동할 수 있다.
 
 개발 중에는 별도 터미널에서 `npm run dev`와 `npm run server`를 실행한다. Vite의 `/online` WebSocket 프록시가 같은 서버로 연결한다. 클라이언트에는 고정 서버 주소를 넣지 않는다.
 
@@ -38,7 +38,7 @@ npm run server
 
 ## 규칙과 서버 경계
 
-`server/index.mjs`는 Node 24의 TypeScript 지원으로 기존 `game.ts`의 `startGame/applyCommand`, `skillGame.ts`의 `applySkillCommand`를 직접 호출한다. 기본 승리·턴·방어·카드 효과를 서버에서 다시 구현하지 않는다. 기존 테스트 덱 생성만 `testSkillScenario.ts`로 추출해 로컬과 온라인이 공유한다. 무효화 비용 등 현재 테스트 규칙을 제품 규칙으로 확정하지 않는다.
+`server/index.mjs`는 Node 24의 TypeScript 지원으로 `game.ts`의 `startGame/applyCommand`, `skillGame.ts`의 `startSkillGame/applySkillCommand`를 호출한다. 온라인 스킬 대국은 매 턴 시작에 일곱 카드 중 한 장을 같은 확률로 지급한다. 무장해제의 적용 전·후 응답은 방어자가 응답하거나 건너뛸 때까지 유지한다.
 
 서버는 세션에서 행동자를 정하고 허용된 action 필드만 추출한다. 클라이언트가 보낸 actorId·대상 신원·완성 판은 사용하지 않는다. 플레이어별 스냅샷에는 공개 game, 본인 손패, 양쪽의 손패 수, 방어 대상·마감·결과와 보호막이 포함된다. 상대 손패와 버린 카드 상세·덱·난수·예약 효과는 직렬화하지 않는다. 이후 지뢰·은신 등 비공개 판 상태를 도입할 때는 이 공개 game 투영도 확장해야 한다.
 
@@ -48,7 +48,7 @@ npm run server
 
 | 요청 | 필드 | 응답 |
 | --- | --- | --- |
-| create | mode, rules | session, snapshot |
+| create | mode, rules (`basic` 또는 `skills`) | session, snapshot |
 | join | roomId | session, snapshot 또는 ROOM_NOT_FOUND/ROOM_FULL |
 | resume | token | session, 최신 snapshot 또는 SESSION_EXPIRED |
 | sync | 없음 | 본인 snapshot |

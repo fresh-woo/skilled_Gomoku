@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { applySkillCommand, expireSnipe, startSkillGame } from '../src/entities/game/model/skillGame.ts'
-import { applyLocalSkillAction, startLocalStoneSkillGame } from '../src/features/local-game/model/localGame.ts'
+import { applySkillCommand, expireSnipe, ONLINE_SKILL_COUNT, startSkillGame } from '../src/entities/game/model/skillGame.ts'
 
 const point = (column, row = 0) => ({ row, column })
 const card = (id, kind) => ({ id, skill: { kind } })
@@ -127,14 +126,18 @@ for (const [mode, length] of [['five-in-a-row', 5], ['six-in-a-row', 6]]) {
   })
 }
 
-test('local official mode draws only official cards, one per turn, with reproducible input', () => {
-  const start = () => startLocalStoneSkillGame('five-in-a-row', null, () => 0).state
-  const first = start()
-  assert.deepEqual(first, start())
-  assert.equal(first.hands['player-1'].length, 1)
-  assert.equal(first.hands['player-2'].length, 0)
-  const moved = applyLocalSkillAction(first, { type: 'place', position: point(0) }).state
-  assert.equal(moved.hands['player-1'].length, 1)
-  assert.equal(moved.hands['player-2'].length, 1)
-  assert.ok(Object.values(moved.hands).flat().every(({ skill }) => ['snipe', 'nullify', 'shield'].includes(skill.kind)))
+test('online mode can draw each of the seven cards and grants one per turn', () => {
+  const draw = (index) => startSkillGame('five-in-a-row', ['a', 'b'], null, 0, index).state
+  const skills = Array.from({ length: ONLINE_SKILL_COUNT }, (_, index) => draw(index).hands.a[0].skill)
+  assert.deepEqual(skills, [
+    { kind: 'snipe' }, { kind: 'nullify' }, { kind: 'shield' },
+    { kind: 'discard', response: 'before' }, { kind: 'cancel' },
+    { kind: 'recover' }, { kind: 'discard', response: 'after' },
+  ])
+  const first = draw(0)
+  assert.equal(first.hands.a.length, 1)
+  assert.equal(first.hands.b.length, 0)
+  const moved = applySkillCommand(first, place('a', point(0)), 1_000, 4).state
+  assert.deepEqual(moved.hands.a, first.hands.a)
+  assert.deepEqual(moved.hands.b, [{ id: 1, skill: { kind: 'cancel' } }])
 })

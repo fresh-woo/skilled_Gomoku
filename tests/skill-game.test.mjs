@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { applySkillCommand, startSkillGame } from '../src/entities/game/model/skillGame.ts'
-import { applyLocalSkillAction, LOCAL_PLAYER_IDS, startLocalSkillGame } from '../src/features/local-game/model/localGame.ts'
 
 // Synthetic cards exercise the engine without fixing the production card pool or timing.
 const attack = { kind: 'discard', response: 'before' }
@@ -152,23 +151,26 @@ test('a winning placement does not advance the draw or scheduled effects', () =>
   assert.deepEqual(use(finished, 'A', 2, 'B'), { ok: false, reason: 'game-finished' })
 })
 
-test('a local five-in-a-row match continues to victory after an off-turn defense', () => {
-  const [black, white] = LOCAL_PLAYER_IDS
-  let state = accepted(startLocalSkillGame('five-in-a-row', null, () => 0))
+const scriptedDeck = [attack, attack, cancel, cancel, recover, recover,
+  { kind: 'discard', response: 'after' }, { kind: 'discard', response: 'after' }]
+
+test('a five-in-a-row skill match continues to victory after an off-turn defense', () => {
+  const [black, white] = ['black', 'white']
+  let state = accepted(startSkillGame('five-in-a-row', [black, white], scriptedDeck, 0))
   function move(row, column) {
-    state = accepted(applyLocalSkillAction(state, { type: 'place', position: { row, column } }))
+    state = accepted(place(state, row === 0 ? black : white, row, column))
   }
 
   move(0, 0)
   move(14, 0)
   move(0, 1)
   assert.deepEqual(hand(state, white), [1, 3])
-  state = accepted(applyLocalSkillAction(state, { type: 'card', cardId: 1 }))
+  state = accepted(use(state, white, 1, black))
   assert.equal(state.response.targetId, black)
-  assert.deepEqual(applyLocalSkillAction(state, { type: 'place', position: { row: 14, column: 2 } }), {
+  assert.deepEqual(place(state, white, 14, 2), {
     ok: false, reason: 'response-pending',
   })
-  state = accepted(applyLocalSkillAction(state, { type: 'card', cardId: 2 }))
+  state = accepted(reply(state, black, state.response.id, 2))
   assert.equal(state.response, null)
   assert.deepEqual(hand(state, black), [0])
   move(14, 2)
@@ -179,31 +181,30 @@ test('a local five-in-a-row match continues to victory after an off-turn defense
   move(0, 4)
   assert.deepEqual(state.game.result, { kind: 'win', winnerId: black })
 
-  const rematch = accepted(startLocalSkillGame('six-in-a-row', state.game, () => 0))
+  const rematch = accepted(startSkillGame('six-in-a-row', [white, black], scriptedDeck, 0))
   assert.equal(rematch.game.players[0].id, white)
   assert.deepEqual(hand(rematch, white), [0])
   assert.deepEqual(hand(rematch, black), [])
 })
 
-test('a local six-in-a-row match can restore a card after an attack', () => {
-  const [black, white] = LOCAL_PLAYER_IDS
-  let state = accepted(startLocalSkillGame('six-in-a-row', null, () => 0))
+test('a six-in-a-row skill match can restore a card after an attack', () => {
+  const [black, white] = ['black', 'white']
+  let state = accepted(startSkillGame('six-in-a-row', [black, white], scriptedDeck, 0))
   for (const column of [0, 1, 2]) {
-    for (const row of [0, 14]) {
-      state = accepted(applyLocalSkillAction(state, { type: 'place', position: { row, column } }))
-    }
+    state = accepted(place(state, black, 0, column))
+    state = accepted(place(state, white, 14, column))
   }
-  state = accepted(applyLocalSkillAction(state, { type: 'card', cardId: 6 }))
+  state = accepted(use(state, black, 6, white))
   assert.equal(state.response.phase, 'after')
   assert.deepEqual(hand(state, white), [3, 5])
-  state = accepted(applyLocalSkillAction(state, { type: 'card', cardId: 5 }))
+  state = accepted(reply(state, white, state.response.id, 5))
   assert.equal(state.response, null)
   assert.deepEqual(hand(state, white), [3, 1])
   for (const column of [3, 4, 5]) {
-    state = accepted(applyLocalSkillAction(state, { type: 'place', position: { row: 0, column } }))
+    state = accepted(place(state, black, 0, column))
     if (column < 5) {
       assert.equal(state.game.status, 'playing')
-      state = accepted(applyLocalSkillAction(state, { type: 'place', position: { row: 14, column } }))
+      state = accepted(place(state, white, 14, column))
     }
   }
   assert.deepEqual(state.game.result, { kind: 'win', winnerId: black })
