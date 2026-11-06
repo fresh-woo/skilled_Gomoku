@@ -3,9 +3,9 @@ import { test } from 'node:test'
 import { applySkillCommand, startSkillGame } from '../src/entities/game/model/skillGame.ts'
 
 // Synthetic cards exercise the engine without fixing the production card pool or timing.
-const attack = { kind: 'discard', response: 'before' }
-const cancel = { kind: 'cancel' }
-const recover = { kind: 'recover' }
+const attack = { kind: 'discard' }
+const nullify = { kind: 'nullify' }
+const shield = { kind: 'shield' }
 const seed = 123456789
 
 function accepted(transition) {
@@ -34,7 +34,7 @@ function hand(state, playerId) {
 }
 
 test('first turn draws once and a valid counter resumes the same turn without using randomness', () => {
-  let state = start([attack, cancel, attack])
+  let state = start([attack, nullify, attack])
   assert.deepEqual(hand(state, 'A'), [0])
   assert.deepEqual(hand(state, 'B'), [])
   state = accepted(place(state, 'A', 0, 0))
@@ -54,7 +54,7 @@ test('first turn draws once and a valid counter resumes the same turn without us
 })
 
 test('invalid timing, target, actor and stale response leave the whole snapshot unchanged', () => {
-  let state = start([attack, recover, cancel])
+  let state = start([attack, shield, nullify])
   state = accepted(place(state, 'A', 0, 0))
   state = accepted(place(state, 'B', 1, 0))
   assert.deepEqual(use(state, 'B', 1, 'A'), { ok: false, reason: 'not-active-player' })
@@ -73,8 +73,8 @@ test('invalid timing, target, actor and stale response leave the whole snapshot 
   assert.deepEqual(waiting, snapshot)
 })
 
-test('passing before an attack selects one card deterministically and rejects replay', () => {
-  let state = start([attack, cancel, cancel, recover])
+test('passing before disarm can discard nullify itself and rejects replay', () => {
+  let state = start([attack, nullify, nullify, shield])
   for (const [actor, row, column] of [['A', 0, 0], ['B', 1, 0], ['A', 0, 1], ['B', 1, 1]]) {
     state = accepted(place(state, actor, row, column))
   }
@@ -87,26 +87,11 @@ test('passing before an attack selects one card deterministically and rejects re
   assert.deepEqual(reply(resumed, 'B', 0), { ok: false, reason: 'invalid-response' })
 })
 
-test('an after-response can recover the exact card discarded by the attack', () => {
-  let state = start([{ kind: 'discard', response: 'after' }, cancel, cancel, recover])
-  for (const [actor, row, column] of [['A', 0, 0], ['B', 1, 0], ['A', 0, 1], ['B', 1, 1]]) {
-    state = accepted(place(state, actor, row, column))
-  }
-  const waiting = accepted(use(state, 'A', 0, 'B'))
-  assert.equal(waiting.response.phase, 'after')
-  assert.deepEqual(hand(waiting, 'B'), [3])
-  const resumed = accepted(reply(waiting, 'B', 0, 3))
-  assert.deepEqual(hand(resumed, 'B'), [1])
-  assert.equal(resumed.response, null)
-  assert.equal(resumed.randomSeed, waiting.randomSeed)
-  assert.deepEqual(resumed.game.turn, state.game.turn)
-})
-
 for (const guardExpires of [true, false]) {
   test(`delayed discard runs before the draw with the guard ${guardExpires ? 'expired' : 'still active'}`, () => {
     const guard = { kind: 'guard', at: guardExpires ? { playerId: 'B', round: 4 } : { playerId: 'A', round: 5 } }
     const delay = { kind: 'delay', at: { playerId: 'B', round: 4 } }
-    let state = start([attack, guard, cancel, delay, cancel, recover, cancel, cancel])
+    let state = start([attack, guard, nullify, delay, nullify, shield, nullify, nullify])
     state = accepted(place(state, 'A', 0, 0))
     state = accepted(use(state, 'B', 1, 'B'))
     state = accepted(place(state, 'B', 1, 0))
@@ -136,7 +121,7 @@ test('a past or unknown effect boundary cannot consume a card', () => {
 
 test('a winning placement does not advance the draw or scheduled effects', () => {
   const guard = { kind: 'guard', at: { playerId: 'A', round: 6 } }
-  let state = start([guard, ...Array(10).fill(cancel)])
+  let state = start([guard, ...Array(10).fill(nullify)])
   state = accepted(use(state, 'A', 0, 'A'))
   for (let column = 0; column < 4; column++) {
     state = accepted(place(state, 'A', 0, column))
@@ -151,8 +136,7 @@ test('a winning placement does not advance the draw or scheduled effects', () =>
   assert.deepEqual(use(finished, 'A', 2, 'B'), { ok: false, reason: 'game-finished' })
 })
 
-const scriptedDeck = [attack, attack, cancel, cancel, recover, recover,
-  { kind: 'discard', response: 'after' }, { kind: 'discard', response: 'after' }]
+const scriptedDeck = [attack, attack, nullify, nullify, shield, shield, attack, attack]
 
 test('a five-in-a-row skill match continues to victory after an off-turn defense', () => {
   const [black, white] = ['black', 'white']
@@ -187,7 +171,7 @@ test('a five-in-a-row skill match continues to victory after an off-turn defense
   assert.deepEqual(hand(rematch, black), [])
 })
 
-test('a six-in-a-row skill match can restore a card after an attack', () => {
+test('a six-in-a-row skill match continues after nullifying disarm', () => {
   const [black, white] = ['black', 'white']
   let state = accepted(startSkillGame('six-in-a-row', [black, white], scriptedDeck, 0))
   for (const column of [0, 1, 2]) {
@@ -195,11 +179,11 @@ test('a six-in-a-row skill match can restore a card after an attack', () => {
     state = accepted(place(state, white, 14, column))
   }
   state = accepted(use(state, black, 6, white))
-  assert.equal(state.response.phase, 'after')
-  assert.deepEqual(hand(state, white), [3, 5])
-  state = accepted(reply(state, white, state.response.id, 5))
+  assert.equal(state.response.phase, 'before')
+  assert.deepEqual(hand(state, white), [1, 3, 5])
+  state = accepted(reply(state, white, state.response.id, 3))
   assert.equal(state.response, null)
-  assert.deepEqual(hand(state, white), [3, 1])
+  assert.deepEqual(hand(state, white), [1, 5])
   for (const column of [3, 4, 5]) {
     state = accepted(place(state, black, 0, column))
     if (column < 5) {

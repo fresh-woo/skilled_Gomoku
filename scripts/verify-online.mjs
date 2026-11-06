@@ -42,8 +42,16 @@ try {
     const session = await a.next('session')
     b.send({ type: 'join', roomId: session.roomId })
     await b.next('session')
-    const initial = await a.next('snapshot', (view) => !!view.game)
-    await b.next('snapshot', (view) => !!view.game)
+    let initial = await a.next('snapshot', (view) => !!view.game)
+    const joined = await b.next('snapshot', (view) => !!view.game)
+    if (initial.skills?.augment?.pending) {
+      for (const [player, view] of [[a, initial], [b, joined]]) {
+        const requestId = player.send({ type: 'command', gameId: view.gameId, revision: view.revision,
+          action: { type: 'choose-augment', round: view.game.turn.round, augmentId: view.skills.augment.choices[0] } })
+        assert.equal((await player.next('result', (message) => message.requestId === requestId)).ok, true)
+      }
+      initial = await a.next('snapshot', (view) => view.skills?.augment?.pending === false)
+    }
     const first = initial.game.players[0].id === 'black' ? a : b
     const id = first.send({ type: 'command', gameId: initial.gameId, revision: initial.revision, action: { type: 'place-stone', position: { row: 7, column: 7 } } })
     assert.equal((await first.next('result', (message) => message.requestId === id)).ok, true)

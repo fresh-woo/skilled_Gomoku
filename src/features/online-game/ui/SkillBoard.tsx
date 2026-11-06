@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { Button } from '../../../design-system/Button'
 import { GameNotice } from '../../../design-system/GameControls'
 import { GomokuBoard } from '../../../design-system/GomokuBoard'
 import { boardCoordinate } from '../../../design-system/board-model'
 import type { BoardCell, StoneColor } from '../../../design-system/board-model'
 import type { GameState, PlayerId, Position } from '../../../entities/game/model/game'
+import { isFortified } from '../../../entities/game/model/augments'
 import { canTargetStone } from '../../../entities/game/model/skillGame'
 import type { SkillView } from '../../../entities/game/model/skillGameView'
 import type { SelectedStoneSkill } from './OnlineSkillHand'
@@ -13,20 +14,6 @@ const snipeMessages = {
   destroyed: '저격으로 돌이 파괴됐어요.',
   shielded: '보호막이 저격을 막고 사라졌어요.',
   nullified: '무효화로 저격을 막았어요.',
-}
-
-export function SnipeNotice({ position, deadline }: { position: Position; deadline: number }) {
-  const [now, setNow] = useState(() => performance.now())
-  useEffect(() => {
-    const timer = setInterval(() => setNow(performance.now()), 200)
-    return () => clearInterval(timer)
-  }, [])
-
-  const remaining = Math.max(0, Math.ceil((deadline - now) / 1_000))
-  return <>
-    <GameNotice>{boardCoordinate(position)} 돌이 저격 대상이에요. 방어자는 무효화하거나 건너뛸 수 있어요.</GameNotice>
-    <p role="timer">남은 시간 {remaining}초</p>
-  </>
 }
 
 export function SnipeOutcome({ outcome }: { outcome: NonNullable<SkillView['snipeOutcome']> }) {
@@ -38,21 +25,29 @@ export function SkillBoard({ game, skills, target, canAct, color, onSelect, onCa
   skills?: SkillView | null
   target?: SelectedStoneSkill | null
   canAct: boolean
-  color: (id: PlayerId) => StoneColor
+  color: (id: PlayerId) => StoneColor | undefined
   onSelect: (position: Position) => void
   onCancel: () => void
 }) {
   const board = useRef<HTMLDivElement>(null)
   const cells: Partial<Record<string, BoardCell>> = {}
   const shields = new Set(skills?.shields.map(({ position }) => boardCoordinate(position)))
+  const fortified = new Set<string>()
+  const protectedPlayers = skills?.augment?.fortifiedPlayers ?? []
   const response = skills?.response
   const selected = response?.phase === 'snipe' ? response.position : undefined
   game.board.cells.forEach((line, row) => line.forEach((stone, column) => {
     if (!stone) return
-    const key = boardCoordinate({ row, column })
+    const position = { row, column }
+    const key = boardCoordinate(position)
+    if (isFortified(game, position, protectedPlayers)) fortified.add(key)
+    const shielded = shields.has(key)
+    const marker = fortified.has(key)
+      ? { label: shielded ? '요새화, 보호막' : '요새화', symbol: '요새' }
+      : shielded ? { label: '보호막', symbol: '보호' } : undefined
     cells[key] = {
       stone: color(stone.ownerId),
-      ...(shields.has(key) ? { marker: { label: '보호막', symbol: '보호' } } : {}),
+      marker,
     }
   }))
 
@@ -65,6 +60,7 @@ export function SkillBoard({ game, skills, target, canAct, color, onSelect, onCa
     if (target && skills) {
       const actorId = game.players[game.turn.activeSeat].id
       if (target.kind === 'shield' && shields.has(boardCoordinate(position))) return false
+      if (target.kind === 'snipe' && fortified.has(boardCoordinate(position))) return false
       return canTargetStone(skills, actorId, target.kind, position)
     }
     return game.board.cells[position.row][position.column] === null

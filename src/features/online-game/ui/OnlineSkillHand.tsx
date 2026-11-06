@@ -10,87 +10,70 @@ import { skillCards } from '../../skill-catalog/cards'
 type Card = SkillView['hands'][string][number]
 type Phase = NonNullable<SkillView['response']>['phase']
 export type SelectedStoneSkill = { kind: 'snipe' | 'shield'; cardId: number }
-type HandAction = { type: 'card'; cardId: number; discardCardId?: number } | { type: 'pass' }
+type HandAction = { type: 'card'; cardId: number } | { type: 'pass' }
 
-function cardOption({ id, skill }: Card, phase: Phase | undefined): Omit<SkillCardOption, 'count'> {
+const blockedText: Partial<Record<NonNullable<SkillView['cardBlocks'][number]>, string>> = {
+  'not-active-player': '내 턴에 사용할 수 있어요.',
+  'response-pending': '상대의 방어 응답을 기다리고 있어요.',
+  'response-expired': '방어 응답 시간이 지났어요.',
+  'augment-pending': '증강 선택이 끝나면 사용할 수 있어요.',
+  'invalid-skill-timing': '현재 시점에는 이 카드를 사용할 수 없어요.',
+  'skill-used-this-turn': '이번 턴에 이미 사용했어요.',
+  'no-skill-target': '판에 선택할 수 있는 대상 돌이 없어요.',
+}
+
+function cardOption({ id, skill }: Card): Omit<SkillCardOption, 'count'> {
   switch (skill.kind) {
     case 'discard':
       return {
         id: String(id),
         title: '무장해제',
-        timing: skill.response === 'before' ? '적용 전 응답' : '적용 후 응답',
+        timing: '적용 전 응답',
         kind: '공격',
         artwork: 'disarm',
         description: '상대 손패에서 무작위로 카드 1장을 버리게 해요.',
-        unavailable: phase ? '방어 응답 중에는 사용할 수 없어요.' : undefined,
-      }
-    case 'cancel':
-      return {
-        id: String(id),
-        title: '무장해제 무효화',
-        kind: '방어',
-        description: '상대의 무장해제가 적용되기 전에 막아요.',
-        unavailable: 'PDF에 없는 카드로 사용을 보류했어요.',
-      }
-    case 'recover':
-      return {
-        id: String(id),
-        title: '손패 복구',
-        kind: '방어',
-        description: '방금 버려진 카드를 손패로 돌려받아요.',
-        unavailable: 'PDF에 없는 카드로 사용을 보류했어요.',
       }
     case 'snipe':
     case 'shield':
     case 'nullify': {
       const definition = skillCards.find((entry) => entry.id === skill.kind)!
-      const unavailable = skill.kind === 'nullify'
-        ? phase !== 'snipe' && '저격에 대응할 때 사용할 수 있어요.'
-        : phase && '방어 응답 중에는 사용할 수 없어요.'
-      return { ...definition, id: String(id), unavailable: unavailable || undefined }
+      return { ...definition, id: String(id) }
     }
     default:
       return { id: String(id), title: '예약 효과', kind: '특수', description: '이 대국의 테스트 덱에서는 사용하지 않아요.', unavailable: '사용 불가' }
   }
 }
 
-function PlayableSkillCards({ hand, side, phase, used, onAction, onTarget }: {
+function PlayableSkillCards({ hand, side, phase, cardBlocks, uiBlock, onAction, onTarget }: {
   hand: readonly Card[]
   side: StoneColor
   phase?: Phase
-  used: SkillView['usedStoneSkills']
+  cardBlocks: SkillView['cardBlocks']
+  uiBlock?: string
   onAction: (action: HandAction) => void
   onTarget: (target: SelectedStoneSkill) => void
 }) {
   const name = useId()
   const [choice, setChoice] = useState('')
-  const [cost, setCost] = useState('')
+
   const groups = new Map<string, SkillCardOption>()
   for (const card of hand) {
-    const key = card.skill.kind === 'discard' ? `discard-${card.skill.response}` : card.skill.kind
+    const key = card.skill.kind
     const group = groups.get(key)
     if (group) group.count += 1
     else {
-      const option = cardOption(card, phase)
-      if (card.skill.kind === 'nullify' && phase === 'snipe' && hand.length < 2) {
-        option.unavailable = '버릴 카드 1장이 더 필요해요.'
-      }
-      if ((card.skill.kind === 'snipe' || card.skill.kind === 'shield') && used.includes(card.skill.kind)) {
-        option.unavailable ??= '이번 턴에 이미 사용했어요.'
-      }
+      const option = cardOption(card)
+      const reason = cardBlocks[card.id]
+      option.unavailable = uiBlock ?? (reason ? blockedText[reason] ?? '지금은 사용할 수 없어요.' : undefined)
       groups.set(key, { ...option, count: 1 })
     }
   }
   const options = [...groups.values()]
   const selected = options.find((option) => option.id === choice && !option.unavailable)
   const selectedKind = hand.find(({ id }) => String(id) === selected?.id)?.skill.kind
-  const choosingCost = selectedKind === 'nullify'
-  const costCards = hand.filter(({ id }) => String(id) !== selected?.id)
-  const validCost = costCards.some(({ id }) => String(id) === cost)
 
   function act(action: HandAction) {
     setChoice('')
-    setCost('')
     onAction(action)
   }
 
@@ -98,7 +81,7 @@ function PlayableSkillCards({ hand, side, phase, used, onAction, onTarget }: {
     if (selectedKind === 'snipe' || selectedKind === 'shield') {
       onTarget({ kind: selectedKind, cardId })
     } else {
-      act({ type: 'card', cardId, ...(choosingCost ? { discardCardId: Number(cost) } : {}) })
+      act({ type: 'card', cardId })
     }
   }
 
@@ -106,30 +89,24 @@ function PlayableSkillCards({ hand, side, phase, used, onAction, onTarget }: {
     <>
       <div className="local-game__card-list">
         {hand.length > 0
-          ? <SkillCardPicker name={name} side={side} cards={options} selected={selected?.id ?? ''} onSelect={(id) => { setChoice(id); setCost('') }} />
+          ? <SkillCardPicker name={name} side={side} cards={options} selected={selected?.id ?? ''} onSelect={setChoice} />
           : <p>손패에 카드가 없어요.</p>}
       </div>
-      {choosingCost && <label>
-        버릴 카드 1장 선택{' '}
-        <select value={cost} onChange={(event) => setCost(event.target.value)}>
-          <option value="">카드 선택</option>
-          {costCards.map((card) => <option key={card.id} value={card.id}>{cardOption(card, phase).title}</option>)}
-        </select>
-      </label>}
       <div className="local-game__actions">
-        <Button disabled={!selected || (choosingCost && !validCost)} onClick={() => { if (selected) playSelectedCard(Number(selected.id)) }}>
-          {choosingCost ? '카드를 버리고 무효화' : (selectedKind === 'snipe' || selectedKind === 'shield') ? '판에서 대상 선택' : '선택한 카드 사용'}
+        <Button disabled={!selected} onClick={() => { if (selected) playSelectedCard(Number(selected.id)) }}>
+          {selectedKind === 'snipe' || selectedKind === 'shield' ? '판에서 대상 선택' : '선택한 카드 사용'}
         </Button>
-        {phase && <Button variant="secondary" onClick={() => act({ type: 'pass' })}>{phase === 'snipe' ? '방어하지 않기' : '확인하고 계속'}</Button>}
+        {phase && <Button variant="secondary" onClick={() => act({ type: 'pass' })}>방어하지 않기</Button>}
       </div>
     </>
   )
 }
 
-export function OnlineSkillHand({ state, playerId, side, onAction, onTarget }: {
+export function OnlineSkillHand({ state, playerId, side, uiBlock, onAction, onTarget }: {
   state: SkillView
   playerId: string
   side: StoneColor
+  uiBlock?: string
   onAction: (action: HandAction) => void
   onTarget: (target: SelectedStoneSkill) => void
 }) {
@@ -156,7 +133,8 @@ export function OnlineSkillHand({ state, playerId, side, onAction, onTarget }: {
         {game.status === 'finished' ? '대국 종료' : active ? (response ? '방어 응답' : '현재 차례') : '대기 중'}
       </p>
       {game.status === 'playing' && (
-        <PlayableSkillCards key={active ? response?.id ?? 'turn' : 'waiting'} hand={hand} side={side} phase={active ? response?.phase : undefined} used={active ? state.usedStoneSkills : []} onTarget={onTarget}
+        <PlayableSkillCards key={active ? response?.id ?? 'turn' : 'waiting'} hand={hand} side={side} phase={active ? response?.phase : undefined}
+          cardBlocks={state.cardBlocks} uiBlock={uiBlock} onTarget={onTarget}
           onAction={(action) => { heading.current?.focus({ preventScroll: true }); onAction(action) }} />
       )}
     </section>

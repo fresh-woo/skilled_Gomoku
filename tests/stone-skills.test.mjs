@@ -36,7 +36,7 @@ test('only the active player can target a live opposing stone with snipe or an o
   assert.equal(state.game.board.cells[0][0].ownerId, 'b')
 })
 
-test('nullify requires the defender to pick a separate card from their hand and keeps the shield', () => {
+test('nullify consumes only itself and keeps the shield', () => {
   const state = fixture()
   const shield = { position: point(0), expiresRound: 6 }
   const pending = accept({ ...state, shields: [shield] }, attack())
@@ -45,18 +45,15 @@ test('nullify requires the defender to pick a separate card from their hand and 
   assert.equal(applySkillCommand(pending, place('a', point(2))).reason, 'response-pending')
   assert.equal(applySkillCommand(pending, defend({ actorId: 'a' })).reason, 'invalid-response')
   assert.equal(applySkillCommand(pending, defend({ attackId: 2 })).reason, 'invalid-response')
-  for (const discardCardId of [undefined, 3, 2, 999]) {
-    assert.equal(applySkillCommand(pending, defend({ cardId: 3, discardCardId }), 15_999).reason, 'invalid-nullify-cost')
-  }
   assert.deepEqual(pending.hands.b, state.hands.b)
-  assert.equal(applySkillCommand(pending, defend({ cardId: 4, discardCardId: 3 })).reason, 'invalid-skill-timing')
-  const canceled = accept(pending, defend({ cardId: 3, discardCardId: 4 }), 15_999)
-  assert.deepEqual(canceled.hands.b, [])
+  assert.equal(applySkillCommand(pending, defend({ cardId: 4 })).reason, 'invalid-skill-timing')
+  const canceled = accept(pending, defend({ cardId: 3 }), 15_999)
+  assert.deepEqual(canceled.hands.b, [card(4, 'shield')])
   assert.equal(canceled.snipeOutcome, 'nullified')
   assert.equal(canceled.response, null)
   assert.deepEqual(canceled.shields, [shield])
   assert.equal(canceled.game, state.game)
-  assert.equal(applySkillCommand(canceled, defend({ cardId: 3, discardCardId: 4 })).reason, 'invalid-response')
+  assert.equal(applySkillCommand(canceled, defend({ cardId: 3 })).reason, 'invalid-response')
   assert.equal(applySkillCommand(canceled, attack(2)).reason, 'skill-used-this-turn')
   const nextTurn = accept(accept(canceled, place('a', point(2))), place('b', point(3)))
   const blocked = accept(accept(nextTurn, attack(2)), defend({ attackId: 2 }))
@@ -70,7 +67,7 @@ test('timeout resolves at the deadline exactly once and resumes the original tur
   const state = fixture()
   const pending = accept(state, attack())
   assert.equal(expireSnipe(pending, 15_999), pending)
-  assert.equal(applySkillCommand(pending, defend({ cardId: 3, discardCardId: 4 }), 16_000).reason, 'response-expired')
+  assert.equal(applySkillCommand(pending, defend({ cardId: 3 }), 16_000).reason, 'response-expired')
   const resolved = expireSnipe(pending, 16_000)
   assert.equal(expireSnipe(resolved, 17_000), resolved)
   assert.equal(resolved.snipeOutcome, 'destroyed')
@@ -126,17 +123,20 @@ for (const [mode, length] of [['five-in-a-row', 5], ['six-in-a-row', 6]]) {
   })
 }
 
-test('online draws only implemented PDF cards and keeps one grant per turn', () => {
-  const draw = (index) => startSkillGame('five-in-a-row', ['a', 'b'], null, 0, index).state
-  const skills = Array.from({ length: ONLINE_SKILL_COUNT }, (_, index) => draw(index).hands.a[0].skill)
-  assert.deepEqual(skills, [
-    { kind: 'snipe' }, { kind: 'nullify' }, { kind: 'shield' },
-    { kind: 'discard', response: 'before' }, { kind: 'discard', response: 'after' },
-  ])
-  const first = draw(0)
-  assert.equal(first.hands.a.length, 1)
-  assert.equal(first.hands.b.length, 0)
-  const moved = applySkillCommand(first, place('a', point(0)), 1_000, 4).state
-  assert.deepEqual(moved.hands.a, first.hands.a)
-  assert.deepEqual(moved.hands.b, [{ id: 1, skill: { kind: 'discard', response: 'after' } }])
+test('online players draw once at their own turn starts in rounds 2 and 4', () => {
+  let state = startSkillGame('five-in-a-row', ['a', 'b'], null, 0).state
+  let draws = 0
+  assert.deepEqual(state.hands, { a: [], b: [] })
+  for (const [column, expected] of [[0, [0, 1]], [1, [2, 2]], [2, [2, 3]], [3, [4, 4]]]) {
+    for (const [row, actor] of ['a', 'b'].entries()) {
+      const transition = applySkillCommand(state, place(actor, point(column, row)), 0, () => draws++)
+      assert.equal(transition.ok, true)
+      state = transition.state
+      assert.equal(draws, expected[row])
+      assert.equal(state.hands.a.length + state.hands.b.length, draws)
+    }
+  }
+  assert.equal(draws, ONLINE_SKILL_COUNT)
+  assert.deepEqual(state.hands.a.map(({ skill }) => skill.kind), ['snipe', 'shield'])
+  assert.deepEqual(state.hands.b.map(({ skill }) => skill.kind), ['nullify', 'discard'])
 })

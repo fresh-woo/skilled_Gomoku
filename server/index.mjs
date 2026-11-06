@@ -5,10 +5,14 @@ import { resolve, extname, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { WebSocketServer, WebSocket } from 'ws'
 import { applyCommand, startGame } from '../src/entities/game/model/game.ts'
-import { applySkillCommand, expireSnipe, ONLINE_SKILL_COUNT, startSkillGame } from '../src/entities/game/model/skillGame.ts'
+import { applySkillCommand, expireSnipe, offerRoundAugments, ONLINE_SKILL_COUNT, startSkillGame } from '../src/entities/game/model/skillGame.ts'
+import { projectSkillGame } from '../src/entities/game/model/skillGameView.ts'
 import { actionSounds } from '../src/entities/game/model/soundEvents.ts'
+import { projectOnlineTurn } from '../src/entities/game/model/onlineTurn.ts'
 
-export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600_000, origins = [], drawCard = () => randomInt(ONLINE_SKILL_COUNT) } = {}) {
+const TURN_LIMIT_MS = 20_000
+
+export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600_000, origins = [], drawCard = () => randomInt(ONLINE_SKILL_COUNT), clockNow = Date.now } = {}) {
   const rooms = new Map()
   const tokens = new Map()
   const root = fileURLToPath(new URL('../dist/', import.meta.url))
@@ -41,25 +45,20 @@ export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600
     if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ v: 1, ...message }))
   }
   function snapshot(room, member) {
-    const game = room.skills?.game ?? room.game
     const skill = room.skills
-    const response = skill?.response
-    // Explicit allowlist: no other hand, deck, RNG, scheduled effects or discarded-card payload.
+    const serverTime = clockNow()
+    const skills = skill ? projectSkillGame(skill, member.id, serverTime) : null
+    const game = skills?.game ?? room.game
     return {
-      type: 'snapshot', roomId: room.id, gameId: room.gameId, revision: room.revision, serverTime: Date.now(),
+      type: 'snapshot', roomId: room.id, gameId: room.gameId, revision: room.revision, serverTime,
       playerId: member.id, mode: room.mode, rules: room.rules,
-      members: room.members.map((m) => ({ id: m.id, connected: !!m.ws, ready: m.ready })),
-      game,
-      skills: skill ? {
-        game, hands: { [member.id]: skill.hands[member.id] },
-        response: response ? {
-          id: response.id, targetId: response.targetId, phase: response.phase,
-          ...(response.phase === 'snipe' ? { position: response.position, deadline: response.deadline } : {}),
-        } : null,
-        shields: skill.shields,
-        usedStoneSkills: skill.usedStoneSkills,
-        snipeOutcome: skill.snipeOutcome,
-      } : null,
+      members: room.members.map((m) => ({
+        id: m.id, connected: !!m.ws, ready: m.ready,
+        color: room.rules === 'skills' ? game && (game.players[0].id === m.id ? 'black' : 'white') : m.id,
+      })),
+      game, turn: projectOnlineTurn(game, skills, member.id),
+      turnClock: room.turnClock ?? null,
+      skills,
       handCounts: skill ? Object.fromEntries(room.members.map((m) => [m.id, skill.hands[m.id].length])) : {},
     }
   }
@@ -76,7 +75,8 @@ export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600
     if (next === room.skills) return false
     room.skills = next
     room.revision++
-    clearTimeout(room.defenseTimer)
+    scheduleDefense(room)
+    refreshTurnClock(room, time)
     broadcast(room)
     return true
   }
@@ -85,23 +85,73 @@ export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600
     const response = room.skills?.response
     if (response?.phase !== 'snipe') return
     room.defenseTimer = setTimeout(() => {
-      if (!settleDefense(room, Date.now())) scheduleDefense(room)
-    }, Math.max(0, response.deadline - Date.now()))
+      if (!settleDefense(room, clockNow())) scheduleDefense(room)
+    }, Math.max(0, response.deadline - clockNow()))
     room.defenseTimer.unref()
   }
-  function begin(room) {
+  function refreshTurnClock(room, time, newTurn = false) {
+    clearTimeout(room.turnTimer)
+    if (room.skills?.game.status !== 'playing') {
+      room.turnClock = null
+      return
+    }
+
+    const clock = newTurn || !room.turnClock ? { deadline: null, remainingMs: TURN_LIMIT_MS } : room.turnClock
+    if (room.skills.augmentOffer || room.skills.response) {
+      room.turnClock = clock.deadline === null ? clock : { deadline: null, remainingMs: Math.max(0, clock.deadline - time) }
+      return
+    }
+
+    const deadline = clock.deadline ?? time + clock.remainingMs
+    room.turnClock = { deadline }
+    room.turnTimer = setTimeout(() => {
+      const currentTime = clockNow()
+      if (room.turnClock?.deadline !== deadline) return
+      if (!settleTurn(room, currentTime)) refreshTurnClock(room, currentTime)
+    }, Math.max(0, deadline - clockNow()))
+    room.turnTimer.unref()
+  }
+  function acceptSkill(room, transition, time) {
+    const newTurn = transition.events.length > 0
+    room.skills = newTurn ? offerRoundAugments(transition.state) : transition.state
+    scheduleDefense(room)
+    refreshTurnClock(room, time, newTurn)
+  }
+  function settleTurn(room, time) {
+    const deadline = room.turnClock?.deadline
+    if (typeof deadline !== 'number' || time < deadline) return false
+    const game = room.skills.game
+    const empty = game.board.cells.flatMap((line, row) =>
+      line.flatMap((stone, column) => stone === null ? [{ row, column }] : []),
+    )
+    const transition = applySkillCommand(room.skills, {
+      type: 'place-stone', actorId: game.players[game.turn.activeSeat].id,
+      position: empty[randomInt(empty.length)],
+    }, time, drawCard)
+    if (!transition.ok) return false
+    acceptSkill(room, transition, time)
+    room.revision++
+    broadcast(room)
+    broadcastSounds(room, actionSounds('place'))
+    return true
+  }
+  function begin(room, time) {
     const previous = room.skills?.game ?? room.game
     const players = previous ? [...previous.players].reverse().map((p) => p.id)
       : (randomInt(2) ? ['black', 'white'] : ['white', 'black'])
     room.gameId = randomUUID()
-    if (room.rules === 'skills') room.skills = startSkillGame(room.mode, players, null, randomInt(0x100000000), drawCard()).state
+    if (room.rules === 'skills') {
+      room.skills = offerRoundAugments(startSkillGame(room.mode, players, null, randomInt(0x100000000)).state)
+    }
     else room.game = startGame(room.mode, players).state
+    refreshTurnClock(room, time, true)
     for (const m of room.members) { m.ready = false; m.results.clear() }
     room.revision++
   }
   function destroy(room) {
     clearTimeout(room.expiry)
     clearTimeout(room.defenseTimer)
+    clearTimeout(room.turnTimer)
     rooms.delete(room.id)
     for (const m of room.members) { tokens.delete(m.token); m.ws?.close(4003, 'Room expired') }
   }
@@ -140,15 +190,17 @@ export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600
           member = { id: room.members.length ? 'white' : 'black', token: randomUUID(), ws, ready: false, results: new Map() }
           room.members.push(member)
           tokens.set(member.token, { member, room })
-          if (room.members.length === 2) begin(room)
+          if (room.members.length === 2) begin(room, clockNow())
         } else { fail('NOT_JOINED'); return }
         send(ws, { type: 'session', token: member.token, roomId: room.id })
-        if (!settleDefense(room, Date.now())) broadcast(room)
+        const time = clockNow()
+        if (!settleDefense(room, time) && !settleTurn(room, time)) broadcast(room)
         return
       }
       if (member.ws !== ws) { fail('SESSION_REPLACED'); return }
-      const time = Date.now()
+      const time = clockNow()
       settleDefense(room, time)
+      settleTurn(room, time)
       if (msg.type === 'sync') { send(ws, snapshot(room, member)); return }
       if (msg.type === 'leave') { destroy(room); return }
       if (msg.type !== 'command') { fail('INVALID_MESSAGE'); return }
@@ -161,17 +213,21 @@ export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600
       const result = { type: 'result', requestId: msg.requestId, ok: false, code: '', revision: room.revision }
       const action = msg.action
       const game = room.skills?.game ?? room.game
+      // Both players may choose from the same snapshot while this round's offer is open.
+      const currentOffer = action?.type === 'choose-augment' && room.skills?.augmentOffer &&
+        action.round === game?.turn?.round && Number.isSafeInteger(msg.revision) &&
+        msg.revision >= 0 && msg.revision <= room.revision
       let cues = []
       if (member.results.size >= 2048) { fail('HISTORY_FULL'); return }
       if (!game || msg.gameId !== room.gameId) result.code = 'WRONG_GAME'
-      else if (msg.revision !== room.revision) result.code = 'STALE_REVISION'
+      else if (msg.revision !== room.revision && !currentOffer) result.code = 'STALE_REVISION'
       else if (!action || typeof action !== 'object') result.code = 'INVALID_ACTION'
       else if (action.type === 'rematch') {
         if (game.status !== 'finished') result.code = 'GAME_NOT_FINISHED'
         else {
           member.ready = true
           result.ok = true
-          if (room.members.every((m) => m.ready)) begin(room)
+          if (room.members.every((m) => m.ready)) begin(room, time)
         }
       } else {
         let command
@@ -184,24 +240,21 @@ export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600
               position: point && { row: point.row, column: point.column } }
           }
         } else if (action.type === 'respond' && Number.isSafeInteger(action.attackId) &&
-          (action.cardId === undefined || Number.isSafeInteger(action.cardId)) &&
-          (action.discardCardId === undefined || Number.isSafeInteger(action.discardCardId))) {
-          command = { type: action.type, actorId: member.id, attackId: action.attackId, cardId: action.cardId, discardCardId: action.discardCardId }
+          (action.cardId === undefined || Number.isSafeInteger(action.cardId))) {
+          command = { type: action.type, actorId: member.id, attackId: action.attackId, cardId: action.cardId }
+        } else if (action.type === 'choose-augment' && typeof action.augmentId === 'string' && Number.isSafeInteger(action.round)) {
+          command = { type: action.type, actorId: member.id, augmentId: action.augmentId, round: action.round }
         }
         if (!command || (!room.skills && command.type !== 'place-stone')) result.code = 'INVALID_ACTION'
         else {
-          const drawIndex = room.rules === 'skills' && command.type === 'place-stone' ? drawCard() : undefined
-          const transition = room.skills ? applySkillCommand(room.skills, command, time, drawIndex) : applyCommand(room.game, command)
+          const transition = room.skills ? applySkillCommand(room.skills, command, time, drawCard) : applyCommand(room.game, command)
           if (!transition.ok) result.code = transition.reason
           else {
-            if (room.skills) {
-              room.skills = transition.state
-              scheduleDefense(room)
-            }
+            if (room.skills) acceptSkill(room, transition, time)
             else room.game = transition.state
             room.revision++
             cues = actionSounds(command.type === 'place-stone' ? 'place'
-              : command.type === 'use-skill' || command.cardId !== undefined ? 'skill' : null)
+              : command.type === 'use-skill' || (command.type === 'respond' && command.cardId !== undefined) ? 'skill' : null)
             result.ok = true
           }
         }

@@ -24,7 +24,7 @@ export function SkillCardFace({ card, side, id, control }: {
   const descriptionId = `${id ?? generatedId}-description`
   const [open, setOpen] = useState(false)
   const Face = control ? 'label' : 'div'
-  return <div className="play-skill-card" data-side={side} data-kind={card.kind} data-unavailable={Boolean(card.unavailable)} tabIndex={0}
+  return <div className="play-skill-card" data-side={side} data-kind={card.kind} data-unavailable={Boolean(card.unavailable)} data-card-state={card.unavailable ? 'unavailable' : 'available'} tabIndex={0}
     aria-label={`${side === 'black' ? '흑돌' : '백돌'} ${card.title}${card.timing ? ` · ${card.timing}` : ''}`}
     onPointerEnter={(e) => { if (e.pointerType === 'mouse') setOpen(true) }}
     onPointerLeave={(e) => { if (!e.currentTarget.contains(document.activeElement)) setOpen(false) }}
@@ -40,7 +40,7 @@ export function SkillCardFace({ card, side, id, control }: {
       <span className="play-skill-card__copy" id={descriptionId} hidden={!open}>
         <b>{card.kind}{card.timing ? ` · ${card.timing}` : ''}</b>
         <span>{card.description}</span>
-        {card.unavailable && <small>{card.unavailable}</small>}
+        {(card.unavailable || control) && <small>{card.unavailable ?? '사용 가능'}</small>}
       </span>
     </Face>
     <button type="button" className="play-skill-card__info" aria-label={`${card.title} 설명`} aria-expanded={open} aria-controls={descriptionId}
