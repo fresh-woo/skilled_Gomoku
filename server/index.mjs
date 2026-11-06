@@ -52,7 +52,10 @@ export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600
     return {
       type: 'snapshot', roomId: room.id, gameId: room.gameId, revision: room.revision, serverTime,
       playerId: member.id, mode: room.mode, rules: room.rules,
-      members: room.members.map((m) => ({ id: m.id, connected: !!m.ws, ready: m.ready })),
+      members: room.members.map((m) => ({
+        id: m.id, connected: !!m.ws, ready: m.ready,
+        color: room.rules === 'skills' ? game && (game.players[0].id === m.id ? 'black' : 'white') : m.id,
+      })),
       game, turn: projectOnlineTurn(game, skills, member.id),
       turnClock: room.turnClock ?? null,
       skills,
@@ -124,7 +127,7 @@ export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600
     const transition = applySkillCommand(room.skills, {
       type: 'place-stone', actorId: game.players[game.turn.activeSeat].id,
       position: empty[randomInt(empty.length)],
-    }, time, drawCard())
+    }, time, drawCard)
     if (!transition.ok) return false
     acceptSkill(room, transition, time)
     room.revision++
@@ -138,7 +141,7 @@ export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600
       : (randomInt(2) ? ['black', 'white'] : ['white', 'black'])
     room.gameId = randomUUID()
     if (room.rules === 'skills') {
-      room.skills = offerRoundAugments(startSkillGame(room.mode, players, null, randomInt(0x100000000), drawCard()).state)
+      room.skills = offerRoundAugments(startSkillGame(room.mode, players, null, randomInt(0x100000000)).state)
     }
     else room.game = startGame(room.mode, players).state
     refreshTurnClock(room, time, true)
@@ -244,8 +247,7 @@ export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600
         }
         if (!command || (!room.skills && command.type !== 'place-stone')) result.code = 'INVALID_ACTION'
         else {
-          const drawIndex = room.rules === 'skills' && command.type === 'place-stone' ? drawCard() : undefined
-          const transition = room.skills ? applySkillCommand(room.skills, command, time, drawIndex) : applyCommand(room.game, command)
+          const transition = room.skills ? applySkillCommand(room.skills, command, time, drawCard) : applyCommand(room.game, command)
           if (!transition.ok) result.code = transition.reason
           else {
             if (room.skills) acceptSkill(room, transition, time)

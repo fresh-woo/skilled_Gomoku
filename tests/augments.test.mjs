@@ -14,13 +14,13 @@ function choose(state, actorId, augmentId) {
 }
 
 test('augment offers open on scheduled round starts and exclude owned choices', () => {
-  const start = startSkillGame('five-in-a-row', ['a', 'b'], null, 0, 0).state
+  const start = startSkillGame('five-in-a-row', ['a', 'b'], null, 0).state
   const offer = offerRoundAugments(start)
   assert.deepEqual(offer.augmentOffer, { a: ['card-bundle', 'fortification'], b: ['card-bundle', 'fortification'] })
   const bundled = choose(offer, 'a', 'card-bundle')
   assert.deepEqual(bundled, choose(offer, 'a', 'card-bundle'))
-  assert.equal(bundled.hands.a.length, 5)
-  assert.equal(new Set(bundled.hands.a.map(({ id }) => id)).size, 5)
+  assert.equal(bundled.hands.a.length, 4)
+  assert.equal(new Set(bundled.hands.a.map(({ id }) => id)).size, 4)
   assert.deepEqual(bundled.hands.b, [])
   const played = choose(bundled, 'b', 'fortification')
   const at = (state, round, activeSeat = 0) => ({

@@ -123,17 +123,20 @@ for (const [mode, length] of [['five-in-a-row', 5], ['six-in-a-row', 6]]) {
   })
 }
 
-test('online mode can draw each of the four cards and grants one per turn', () => {
-  const draw = (index) => startSkillGame('five-in-a-row', ['a', 'b'], null, 0, index).state
-  const skills = Array.from({ length: ONLINE_SKILL_COUNT }, (_, index) => draw(index).hands.a[0].skill)
-  assert.deepEqual(skills, [
-    { kind: 'snipe' }, { kind: 'nullify' }, { kind: 'shield' },
-    { kind: 'discard' },
-  ])
-  const first = draw(0)
-  assert.equal(first.hands.a.length, 1)
-  assert.equal(first.hands.b.length, 0)
-  const moved = applySkillCommand(first, place('a', point(0)), 1_000, 1).state
-  assert.deepEqual(moved.hands.a, first.hands.a)
-  assert.deepEqual(moved.hands.b, [{ id: 1, skill: { kind: 'nullify' } }])
+test('online players draw once at their own turn starts in rounds 2 and 4', () => {
+  let state = startSkillGame('five-in-a-row', ['a', 'b'], null, 0).state
+  let draws = 0
+  assert.deepEqual(state.hands, { a: [], b: [] })
+  for (const [column, expected] of [[0, [0, 1]], [1, [2, 2]], [2, [2, 3]], [3, [4, 4]]]) {
+    for (const [row, actor] of ['a', 'b'].entries()) {
+      const transition = applySkillCommand(state, place(actor, point(column, row)), 0, () => draws++)
+      assert.equal(transition.ok, true)
+      state = transition.state
+      assert.equal(draws, expected[row])
+      assert.equal(state.hands.a.length + state.hands.b.length, draws)
+    }
+  }
+  assert.equal(draws, ONLINE_SKILL_COUNT)
+  assert.deepEqual(state.hands.a.map(({ skill }) => skill.kind), ['snipe', 'shield'])
+  assert.deepEqual(state.hands.b.map(({ skill }) => skill.kind), ['nullify', 'discard'])
 })

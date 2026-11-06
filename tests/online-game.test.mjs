@@ -28,7 +28,7 @@ async function client(url) {
 }
 
 test('online snipe keeps a private, idempotent defense across reconnect and resolves without a defender', { timeout: 25000 }, async (t) => {
-  const draws = [0, 1, 3, 2, 0]
+  const draws = [0, 1, 0]
   const ctx = await setup(t, 'five-in-a-row', 'stone-skills', { drawCard: () => draws.shift() ?? 0 })
   await chooseInitialFortification(ctx)
   let view = ctx.view
@@ -38,10 +38,8 @@ test('online snipe keeps a private, idempotent defense across reconnect and reso
   const defender = first === 'black' ? ctx.b : ctx.a
   const defenderToken = (defender === ctx.a ? ctx.sessionA : ctx.sessionB).token
   const target = { row: 2, column: 0 }
-  for (const [actor, row, column] of [[attacker, 0, 0], [defender, 2, 0], [attacker, 0, 1], [defender, 2, 1]]) {
-    const move = await command(actor, view, { type: 'place-stone', position: { row, column } })
-    assert.equal(move.result.ok, true)
-    view = move.view
+  for (let column = 0; column < 2; column++) {
+    view = await placePair(attacker, defender, view, column)
   }
   view = await attacker.next('snapshot', (m) => m.revision === view.revision)
   const cardId = view.skills.hands[first][0].id
@@ -67,18 +65,17 @@ test('online snipe keeps a private, idempotent defense across reconnect and reso
   assert.deepEqual(restored.skills.response, pending)
   assert.deepEqual(restored.turn, { ...view.turn, phase: 'defend' })
   assert.equal(restored.skills.hands[first], undefined)
-  const [nullify, shield] = restored.skills.hands[second]
-  assert.deepEqual([nullify.skill.kind, shield.skill.kind], ['nullify', 'shield'])
+  const [nullify] = restored.skills.hands[second]
+  assert.equal(nullify.skill.kind, 'nullify')
   assert.equal(restored.skills.cardBlocks[nullify.id], null)
-  assert.equal(restored.skills.cardBlocks[shield.id], 'invalid-skill-timing')
-  assert.deepEqual(Object.keys(restored.skills.cardBlocks), [String(nullify.id), String(shield.id)])
+  assert.deepEqual(Object.keys(restored.skills.cardBlocks), [String(nullify.id)])
 
   const response = { type: 'respond', attackId: pending.id, cardId: nullify.id }
   const canceled = await command(resumed, restored, response)
   assert.equal(canceled.result.ok, true)
   const retry = await command(resumed, restored, response, { requestId: canceled.requestId })
   assert.deepEqual(retry.result, canceled.result)
-  assert.deepEqual(retry.view.skills.hands[second], [shield])
+  assert.deepEqual(retry.view.skills.hands[second], [])
   assert.equal(retry.view.skills.snipeOutcome, 'nullified')
   assert.equal(retry.view.turn.phase, 'opponent-turn')
   assert.deepEqual(retry.view.game.turn, view.game.turn)
@@ -110,14 +107,6 @@ test('online snipe keeps a private, idempotent defense across reconnect and reso
   assert.equal(postTimeout.revision, timedOut.revision)
   assert.deepEqual(postTimeout.game, timedOut.game)
   assert.equal(postTimeout.skills.hands[second].length, nextTurn.view.skills.hands[second].length)
-  const discardCard = timedOut.skills.hands[first].find(({ skill }) => skill.kind === 'discard')
-  const disarm = await command(attacker, timedOut, { type: 'use-skill', cardId: discardCard.id })
-  assert.equal(disarm.view.skills.response.phase, 'before')
-  assert.equal(disarm.view.skills.response.deadline, undefined)
-  assert.equal(disarm.view.skills.snipeOutcome, null)
-  const passed = await command(later, disarm.view, { type: 'respond', attackId: discardCard.id })
-  assert.equal(passed.result.ok, true)
-  assert.equal(passed.view.skills.hands[second].length, disarm.view.handCounts[second] - 1)
 })
 async function setup(t, mode = 'five-in-a-row', rules = 'basic', options = {}) {
   const server = createOnlineServer(options)
@@ -143,6 +132,15 @@ async function command(client, view, action, extra = {}) {
   return { result, view: next, requestId }
 }
 
+async function placePair(first, second, view, column) {
+  for (const [actor, row] of [[first, 0], [second, 2]]) {
+    const move = await command(actor, view, { type: 'place-stone', position: { row, column } })
+    assert.equal(move.result.ok, true)
+    view = move.view
+  }
+  return view
+}
+
 async function chooseInitialFortification(ctx) {
   const action = { type: 'choose-augment', round: 1, augmentId: 'fortification' }
   assert.equal((await command(ctx.a, ctx.view, action)).result.ok, true)
@@ -152,7 +150,7 @@ async function chooseInitialFortification(ctx) {
 
 test('skill turn clock pauses for defense, survives reconnect and auto-places once at the deadline', async (t) => {
   let time = 100_000
-  const draws = [3, 1, 3]
+  const draws = [3, 1]
   const ctx = await setup(t, 'five-in-a-row', 'skills', {
     clockNow: () => time, drawCard: () => draws.shift() ?? 3,
   })
@@ -166,9 +164,9 @@ test('skill turn clock pauses for defense, survives reconnect and auto-places on
   const secondToken = (second === ctx.a ? ctx.sessionA : ctx.sessionB).token
   assert.deepEqual(ctx.view.turnClock, { deadline: time + 20_000 })
 
-  const firstMove = await command(first, ctx.view, { type: 'place-stone', position: { row: 0, column: 0 } })
-  const secondMove = await command(second, firstMove.view, { type: 'place-stone', position: { row: 2, column: 0 } })
-  const before = await first.next('snapshot', (m) => m.revision === secondMove.view.revision)
+  const roundTwo = await placePair(first, second, ctx.view, 0)
+  const roundThree = await placePair(first, second, roundTwo, 1)
+  const before = await first.next('snapshot', (m) => m.revision === roundThree.revision)
   const disarm = before.skills.hands[firstId].find((card) => card.skill.kind === 'discard')
   time += 7_000
   const attack = await command(first, before, { type: 'use-skill', cardId: disarm.id })
@@ -205,14 +203,14 @@ test('skill turn clock pauses for defense, survives reconnect and auto-places on
   assert.deepEqual(replay.view.turnClock, resolved.view.turnClock)
 
   time = resolved.view.turnClock.deadline
-  const place = { type: 'place-stone', position: { row: 0, column: 1 } }
+  const place = { type: 'place-stone', position: { row: 0, column: 2 } }
   const late = await command(first, resolved.view, place)
   assert.equal(late.result.code, 'STALE_REVISION')
   assert.equal(late.view.revision, resolved.view.revision + 1)
   assert.equal(late.view.turn.activePlayerId, secondId)
   assert.deepEqual(late.view.turnClock, { deadline: time + 20_000 })
-  assert.equal(late.view.game.board.cells.flat().filter(Boolean).length, 3)
-  assert.equal(late.view.game.board.cells.flat().filter((stone) => stone?.ownerId === firstId).length, 2)
+  assert.equal(late.view.game.board.cells.flat().filter(Boolean).length, 5)
+  assert.equal(late.view.game.board.cells.flat().filter((stone) => stone?.ownerId === firstId).length, 3)
   const duplicate = await command(first, resolved.view, place, { requestId: late.requestId })
   assert.deepEqual(duplicate.result, late.result)
   assert.deepEqual(duplicate.view.game, late.view.game)
@@ -262,12 +260,16 @@ test('online augment choices wait for both players and survive reconnect without
   assert.deepEqual(ctx.a.sounds(), [])
 })
 
-for (const [mode, length] of [['five-in-a-row', 5], ['six-in-a-row', 6]]) {
-  test(`online ${mode}: authorized turns, exact win, two-party rematch`, { timeout: 15000 }, async (t) => {
-    const ctx = await setup(t, mode)
+for (const [mode, length, rules] of [['five-in-a-row', 5, 'basic'], ['six-in-a-row', 6, 'basic'], ['five-in-a-row', 5, 'skills']]) {
+  test(`online ${mode} ${rules}: exact win, two-party rematch and stable player identity`, { timeout: 15000 }, async (t) => {
+    const ctx = await setup(t, mode, rules)
+    if (rules === 'skills') await chooseInitialFortification(ctx)
     let view = ctx.view
-    const first = view.game.players[0].id === 'black' ? ctx.a : ctx.b
+    const [firstId, secondId] = view.game.players.map(({ id }) => id)
+    const first = firstId === 'black' ? ctx.a : ctx.b
     const second = first === ctx.a ? ctx.b : ctx.a
+    const colors = (snapshot) => Object.fromEntries(snapshot.members.map(({ id, color }) => [id, color]))
+    if (rules === 'skills') assert.deepEqual(colors(view), { [firstId]: 'black', [secondId]: 'white' })
     for (let column = 0; column < length; column++) {
       let step = await command(first, view, { type: 'place-stone', position: { row: 0, column } })
       assert.equal(step.result.ok, true)
@@ -288,6 +290,20 @@ for (const [mode, length] of [['five-in-a-row', 5], ['six-in-a-row', 6]]) {
     assert.notEqual(newRound.view.gameId, oldGameId)
     assert.notEqual(newRound.view.game.players[0].id, oldFirst)
     assert.ok(newRound.view.game.board.cells.flat().every((cell) => cell === null))
+    if (rules === 'skills') {
+      const mirrored = await first.next('snapshot', (m) => m.gameId === newRound.view.gameId)
+      assert.equal(mirrored.playerId, firstId)
+      assert.equal(newRound.view.playerId, secondId)
+      assert.deepEqual(colors(newRound.view), { [firstId]: 'white', [secondId]: 'black' })
+      assert.deepEqual(colors(mirrored), colors(newRound.view))
+      const resumed = await client(ctx.url)
+      resumed.send({ type: 'resume', token: (first === ctx.a ? ctx.sessionA : ctx.sessionB).token })
+      await resumed.next('session')
+      const restored = await resumed.next('snapshot')
+      assert.equal(restored.playerId, firstId)
+      assert.deepEqual(colors(restored), colors(newRound.view))
+      assert.deepEqual(restored.handCounts, { [firstId]: 0, [secondId]: 0 })
+    }
   })
 }
 
@@ -333,7 +349,7 @@ test('authority, idempotency, revision race, room capacity, resume and fencing',
 })
 
 test('skill play, private projection, defense and resume do not redraw', { timeout: 15000 }, async (t) => {
-  const draws = [3, 3, 1, 1, 2]
+  const draws = [3, 1]
   const ctx = await setup(t, 'five-in-a-row', 'skills', { drawCard: () => draws.shift() ?? 3 })
   await chooseInitialFortification(ctx)
   let view = ctx.view
@@ -349,10 +365,11 @@ test('skill play, private projection, defense and resume do not redraw', { timeo
     assert.ok(!snapshot.skills.response || !('discarded' in snapshot.skills.response))
   }
   checkPrivacy(view)
-  view = (await command(first, view, { type: 'place-stone', position: { row: 0, column: 0 } })).view
-  view = (await command(second, view, { type: 'place-stone', position: { row: 2, column: 0 } })).view
-  view = (await command(first, view, { type: 'place-stone', position: { row: 0, column: 1 } })).view
-  view = (await command(second, view, { type: 'place-stone', position: { row: 2, column: 1 } })).view
+  assert.deepEqual(view.handCounts, { black: 0, white: 0 })
+  view = await placePair(first, second, view, 0)
+  assert.deepEqual(view.handCounts, { [firstId]: 1, [secondId]: 0 })
+  view = await placePair(first, second, view, 1)
+  assert.deepEqual(view.handCounts, { [firstId]: 1, [secondId]: 1 })
   const firstViewId = first.send({ type: 'sync' })
   assert.ok(firstViewId)
   view = await first.next('snapshot', (m) => m.revision === view.revision && m.playerId === firstId)
@@ -363,6 +380,8 @@ test('skill play, private projection, defense and resume do not redraw', { timeo
   assert.deepEqual(await second.next('sound', (message) => message.revision === view.revision), attackSound)
   assert.deepEqual(Object.keys(attackSound).sort(), ['cues', 'gameId', 'revision', 'type', 'v'])
   assert.equal(view.skills.response.targetId, secondId)
+  assert.equal(view.skills.response.phase, 'before')
+  assert.equal(view.skills.response.deadline, undefined)
   const rejected = await command(first, view, { type: 'place-stone', position: { row: 0, column: 1 } })
   assert.equal(rejected.result.code, 'response-pending')
   second.send({ type: 'sync' })
