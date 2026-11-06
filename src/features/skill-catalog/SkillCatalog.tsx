@@ -19,7 +19,7 @@ export function SkillCatalogButton() {
     <>
       <Button variant="secondary" onClick={() => setIsOpen(true)}>카드 도감 · {skillCards.length}장</Button>
       {isOpen && (
-        <Modal title="스킬카드 도감" description="카드별 효과와 흑·백 프레임을 확인하세요. 스킬 대국에서는 저격·무효화·보호막을 사용해요."
+        <Modal title="스킬카드 도감" description="카드별 효과와 흑·백 프레임을 확인하세요."
           onDismiss={() => setIsOpen(false)}>
           <div className="skill-catalog__filters">
             <div role="group" aria-label="카드 종류">

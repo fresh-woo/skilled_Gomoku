@@ -7,7 +7,7 @@ import type { BoardCell, StoneColor } from '../../../design-system/board-model'
 import type { GameState, PlayerId, Position } from '../../../entities/game/model/game'
 import { canTargetStone } from '../../../entities/game/model/skillGame'
 import type { SkillView } from '../../../entities/game/model/skillGameView'
-import type { SelectedStoneSkill } from './LocalSkillHand'
+import type { SelectedStoneSkill } from './OnlineSkillHand'
 
 const snipeMessages = {
   destroyed: '저격으로 돌이 파괴됐어요.',
