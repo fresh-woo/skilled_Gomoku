@@ -36,6 +36,7 @@ npm run preview    # 빌드 결과 확인 (먼저 build 실행)
 - [게임 기획](docs/game-spec.md): 게임 방향과 미확정 사항
 - [개발 로드맵](docs/development-roadmap.md): 단계별 개발 순서와 개발 채팅 전달 내용
 - [온라인 협업 가이드](docs/online-collaboration.md): 동료와의 역할, WebSocket 검토 및 통합 순서
+- [온라인 통신 제안](docs/online-transport-proposal.md): 기술 선택지, 서버 상태·규칙 경계와 메시지 초안
 - [디자인 시스템](docs/design-system.md): 디자인·개발 작업 경계와 UI 기준
 - [작업 기록](docs/work-log.md): 현재 상태, 검증 및 다음 작업
 - [설계 결정](docs/decisions.md): 주요 결정과 미확정 사항
@@ -60,4 +61,10 @@ npm run preview    # 빌드 결과 확인 (먼저 build 실행)
 
 ## 온라인 기능
 
+GitHub 브랜치·PR와 배포 운영 절차는 [GitHub와 Render 운영 방법](docs/github-and-deployment.md)을 참고합니다. 공개 배포의 상태와 커밋은 `/health`에서 확인하고, `npm run verify:online -- https://<실제 호스트> <배포 SHA>`로 통신을 검증할 수 있습니다.
+
+온라인 2인 기본/스킬 테스트 대국을 사용할 수 있습니다. `npm run build` 후 `npm run server`를 실행하고 `http://127.0.0.1:8787/#online-game`에서 방을 만든 뒤 다른 탭/브라우저가 방 코드로 참가합니다. 개발 중에는 `npm run dev`도 별도 터미널에서 실행합니다. 다른 기기 접속, 재접속 범위와 서버 설정은 [온라인 실행 가이드](docs/online-play.md)를 참고하세요. 계정·DB 없이 실행되며 서버 재시작 시 대국은 사라집니다.
+
 직접 운영하는 서버는 최소화할 예정입니다. 온라인 플레이에는 상태를 공유할 서비스가 필요하며, Supabase 등 관리형 서비스 사용 여부와 턴 검증 방식은 게임 기획을 확인한 뒤 결정합니다. 클라이언트 환경 변수에 비밀 키를 넣지 않습니다.
+
+게임과 분리된 로컬 WebSocket 연결 실험은 [experiments/websocket](experiments/websocket/README.md)에 있습니다. Node.js 24에서 해당 폴더로 이동해 `npm ci --ignore-scripts`, `npm test`를 실행합니다. 제품 라이브러리·호스팅·DB를 확정한 구현은 아닙니다.

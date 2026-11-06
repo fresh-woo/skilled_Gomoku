@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { Button } from '../../../design-system/Button'
 import { GameChoices } from '../../../design-system/GameControls'
 import type { SkillGame } from '../../../entities/game/model/skillGame'
+import type { SkillView } from '../../../entities/game/model/skillGameView'
 import type { LocalSkillAction } from '../model/localGame'
 
 type Card = SkillGame['hands'][string][number]
@@ -34,8 +35,9 @@ function cardOption({ id, skill }: Card, phase: 'before' | 'after' | undefined) 
   }
 }
 
-export function LocalSkillHand({ state, playerLabel, onAction }: {
-  state: SkillGame
+export function LocalSkillHand({ state, playerLabel, onAction, viewerId }: {
+  state: SkillView
+  viewerId?: string
   playerLabel: (playerId: string) => string
   onAction: (action: LocalSkillAction) => void
 }) {
@@ -51,7 +53,7 @@ export function LocalSkillHand({ state, playerLabel, onAction }: {
 
   if (game.status === 'finished') return null
 
-  const playerId = response?.targetId ?? game.players[game.turn.activeSeat].id
+  const playerId = viewerId ?? response?.targetId ?? game.players[game.turn.activeSeat].id
   const hand = state.hands[playerId]
   const groups = new Map<string, { option: ReturnType<typeof cardOption>; count: number }>()
   for (const card of hand) {
@@ -79,7 +81,7 @@ export function LocalSkillHand({ state, playerLabel, onAction }: {
         : <p>손패에 카드가 없어요.</p>}
       <div className="local-game__actions">
         {selected && <Button onClick={() => act({ type: 'card', cardId: Number(selected.id) })}>선택한 카드 사용</Button>}
-        {response && <Button variant="secondary" onClick={() => act({ type: 'pass' })}>방어하지 않기</Button>}
+        {response?.targetId === playerId && <Button variant="secondary" onClick={() => act({ type: 'pass' })}>방어하지 않기</Button>}
       </div>
     </section>
   )
