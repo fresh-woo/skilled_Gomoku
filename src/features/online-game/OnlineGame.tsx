@@ -36,6 +36,13 @@ const onlineRules = [
   { id: 'basic', title: '기본 대국', description: '돌을 번갈아 놓아요.' },
   { id: 'skills', title: '스킬 대국', description: '착수 전에 카드를 쓰고 상대의 공격에 대응해요.' },
 ]
+const turnLabels = {
+  'my-turn': '내 턴',
+  'opponent-turn': '상대 턴',
+  defend: '내 방어 응답',
+  'waiting-defense': '상대 방어 대기',
+  'choose-augment': '증강 선택 중',
+} as const
 function storedToken() { try { return sessionStorage.getItem(storageKey) } catch { return null } }
 function saveToken(token: string | null) {
   try { if (token) sessionStorage.setItem(storageKey, token); else sessionStorage.removeItem(storageKey) } catch { /* Memory reconnection still works. */ }
@@ -72,6 +79,7 @@ export function OnlineGame() {
       current = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/online`)
       const soundCursor = createSoundCursor()
       let soundGameId: string | undefined
+      let firstSnapshot = true
       socket.current = current
       current.onopen = () => current.send(JSON.stringify({ v: 1, requestId: requestId(), ...(token ? { type: 'resume', token } : entry) }))
       current.onmessage = ({ data }) => {
@@ -86,7 +94,8 @@ export function OnlineGame() {
           setView({ ...message, receivedAt: performance.now() })
           setConnected(true)
           setStatus('연결됨')
-          if (pending.current) current.send(JSON.stringify(pending.current))
+          if (firstSnapshot && pending.current) current.send(JSON.stringify(pending.current))
+          firstSnapshot = false
         }
         if (message.type === 'sound') void playGameSounds(soundCursor.consume(message))
         if (message.type === 'result' || message.type === 'error') {
@@ -130,9 +139,10 @@ export function OnlineGame() {
   const game = view?.game
   const response = view?.skills?.response
   const augment = view?.skills?.augment
-  const myTurn = game?.status === 'playing' && game.players[game.turn.activeSeat].id === view?.playerId
-  const myDefense = Boolean(response && response.targetId === view?.playerId)
-  const canAct = connected && !busy && !augment?.pending && (response ? myDefense : myTurn)
+  const turn = view?.turn
+  const myTurn = turn?.phase === 'my-turn'
+  const myDefense = turn?.phase === 'defend'
+  const canAct = connected && !busy && (myDefense || myTurn)
   const canDefend = myDefense && canAct
   const label = (id: string) => id === 'black' ? '흑돌' : '백돌'
 
@@ -168,20 +178,22 @@ export function OnlineGame() {
     </div>
     {game && <div className="local-game__table" data-skills={Boolean(view?.skills)}>
       <div className="local-game__board">
-        {game.status === 'playing' && (
+        {turn && 'round' in turn && (
+          <div data-turn-phase={turn.phase}>
           <GameNotice tone={canDefend ? 'warning' : 'info'}>
-            <strong>{augment?.pending ? '증강 선택 중' : myTurn ? '내 턴' : '상대 턴'}</strong> · {game.turn.round}라운드
+            <strong>{turnLabels[turn.phase]}</strong> · {turn.round}라운드
             <div>
               {!connected ? '다시 연결하는 중이에요.'
                 : busy ? '행동을 처리하고 있어요.'
                 : augment?.pending ? augment.choices.length ? '두 사람이 모두 고르면 대국을 진행해요.' : '상대가 고를 때까지 기다려 주세요.'
                 : canDefend ? <>방어 응답 가능 · <a href="#online-skill-hand">손패로 이동</a></>
-                : response ? '상대의 방어 응답을 기다려 주세요.'
+                : turn.phase === 'waiting-defense' ? '상대의 방어 응답을 기다려 주세요.'
                 : target ? '판에서 카드의 대상을 고르세요.'
                 : myTurn ? '판에서 돌을 놓을 수 있어요.'
                 : '상대의 착수를 기다려 주세요.'}
             </div>
           </GameNotice>
+          </div>
         )}
         {augment?.pending && error && <GameNotice tone="error" alert>{error}</GameNotice>}
         {game.status === 'playing' && Boolean(augment?.choices.length) && augment && (
