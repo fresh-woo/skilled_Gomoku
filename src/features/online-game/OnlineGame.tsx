@@ -6,6 +6,8 @@ import type { SelectedStoneSkill } from './ui/OnlineSkillHand'
 import { SkillBoard, SnipeNotice, SnipeOutcome } from './ui/SkillBoard'
 import { SkillCatalogButton } from '../skill-catalog/SkillCatalog'
 import type { OnlineAction, Snapshot } from './protocol'
+import { createSoundCursor } from '../../entities/game/model/soundEvents'
+import { playGameSounds } from '../game-sound/audio'
 
 const storageKey = 'gomoku-online-session-v1'
 // LAN HTTP does not expose crypto.randomUUID; IDs are correlation keys, not credentials.
@@ -63,6 +65,8 @@ export function OnlineGame() {
       setConnected(false)
       setStatus(attempts ? '다시 연결하는 중…' : '서버에 연결하는 중…')
       current = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/online`)
+      const soundCursor = createSoundCursor()
+      let soundGameId: string | undefined
       socket.current = current
       current.onopen = () => current.send(JSON.stringify({ v: 1, requestId: requestId(), ...(token ? { type: 'resume', token } : entry) }))
       current.onmessage = ({ data }) => {
@@ -70,11 +74,16 @@ export function OnlineGame() {
         const message = JSON.parse(data)
         if (message.type === 'session') { token = message.token; saveToken(token); attempts = 0 }
         if (message.type === 'snapshot') {
+          if (soundGameId !== message.gameId) {
+            soundGameId = message.gameId
+            soundCursor.sync(message.gameId, message.revision)
+          }
           setView({ ...message, receivedAt: performance.now() })
           setConnected(true)
           setStatus('연결됨')
           if (pending.current) current.send(JSON.stringify(pending.current))
         }
+        if (message.type === 'sound') void playGameSounds(soundCursor.consume(message))
         if (message.type === 'result' || message.type === 'error') {
           if (pending.current?.requestId === message.requestId) { pending.current = null; setBusy(false) }
           if (message.type === 'error' || !message.ok) setError(errors[message.code] ?? '행동을 처리하지 못했어요. 현재 차례와 카드 사용 조건을 확인하세요.')

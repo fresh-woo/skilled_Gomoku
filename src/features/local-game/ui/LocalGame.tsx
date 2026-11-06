@@ -6,6 +6,9 @@ import { boardCoordinate } from '../../../design-system/board-model'
 import type { BoardCell } from '../../../design-system/board-model'
 import { WIN_LENGTH } from '../../../entities/game/model/game'
 import type { GameMode, GameState, PlayerId, Position } from '../../../entities/game/model/game'
+import { actionSounds } from '../../../entities/game/model/soundEvents'
+import type { GameSound } from '../../../entities/game/model/soundEvents'
+import { useGameSounds } from '../../game-sound/useGameSounds'
 import { LOCAL_PLAYER_IDS, placeLocalStone, startLocalGame } from '../model/localGame'
 import './LocalGame.css'
 
@@ -21,18 +24,20 @@ function stoneLabel(playerId: PlayerId) {
 
 export function LocalGame() {
   const [mode, setMode] = useState<GameMode>('five-in-a-row')
-  const [game, setGame] = useState<GameState | null>(null)
+  const [match, setMatch] = useState<{ game: GameState; sounds?: readonly GameSound[] } | null>(null)
+  const game = match?.game ?? null
+  useGameSounds(match?.sounds)
 
   function start() {
     const transition = startLocalGame(mode, game)
-    if (transition.ok) setGame(transition.state)
+    if (transition.ok) setMatch({ game: transition.state })
   }
 
   function place(position: Position) {
-    setGame((current) => {
+    setMatch((current) => {
       if (!current) return current
-      const transition = placeLocalStone(current, position)
-      return transition.ok ? transition.state : current
+      const transition = placeLocalStone(current.game, position)
+      return transition.ok ? { game: transition.state, sounds: actionSounds('place') } : current
     })
   }
 

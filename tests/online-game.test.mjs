@@ -11,6 +11,8 @@ async function client(url) {
   await once(socket, 'open')
   return {
     socket,
+    clear() { messages.length = 0 },
+    sounds() { return messages.filter((message) => message.type === 'sound') },
     send(message) { const requestId = message.requestId ?? crypto.randomUUID(); socket.send(JSON.stringify({ v: 1, ...message, requestId })); return requestId },
     async next(type, predicate = () => true, timeout = 2500) {
       const deadline = Date.now() + timeout
@@ -231,6 +233,10 @@ test('skill play, private projection, defense and resume do not redraw', { timeo
   view = await first.next('snapshot', (m) => m.revision === view.revision && m.playerId === firstId)
   const card = view.skills.hands[firstId].find((c) => c.skill.kind === 'discard')
   view = (await command(first, view, { type: 'use-skill', cardId: card.id })).view
+  const attackSound = await first.next('sound', (message) => message.revision === view.revision)
+  assert.deepEqual(attackSound.cues, ['skill'])
+  assert.deepEqual(await second.next('sound', (message) => message.revision === view.revision), attackSound)
+  assert.deepEqual(Object.keys(attackSound).sort(), ['cues', 'gameId', 'revision', 'type', 'v'])
   assert.equal(view.skills.response.targetId, secondId)
   const rejected = await command(first, view, { type: 'place-stone', position: { row: 0, column: 1 } })
   assert.equal(rejected.result.code, 'response-pending')
@@ -238,6 +244,7 @@ test('skill play, private projection, defense and resume do not redraw', { timeo
   const defenseView = await second.next('snapshot', (m) => m.revision === view.revision && !!m.skills.response)
   const defense = defenseView.skills.hands[secondId].find((c) => c.skill.kind === 'cancel')
   view = (await command(second, view, { type: 'respond', attackId: view.skills.response.id, cardId: defense.id })).view
+  assert.deepEqual((await second.next('sound', (message) => message.revision === view.revision)).cues, ['skill'])
   assert.equal(view.skills.response, null)
   assert.equal(view.game.players[view.game.turn.activeSeat].id, firstId)
   checkPrivacy(view)
@@ -249,6 +256,36 @@ test('skill play, private projection, defense and resume do not redraw', { timeo
   checkPrivacy(restored)
   assert.deepEqual(restored.handCounts, view.handCounts)
   assert.equal(restored.revision, view.revision)
+})
+
+test('sound events are broadcast once on acceptance, not on rejection, replay or resume', { timeout: 10000 }, async (t) => {
+  const ctx = await setup(t)
+  const first = ctx.view.game.players[0].id === 'black' ? ctx.a : ctx.b
+  const second = first === ctx.a ? ctx.b : ctx.a
+  const move = { type: 'place-stone', position: { row: 7, column: 7 } }
+  const accepted = await command(first, ctx.view, move)
+  const sound = await first.next('sound')
+  assert.deepEqual(sound.cues, ['place'])
+  assert.equal(sound.revision, accepted.view.revision)
+  assert.deepEqual(await second.next('sound'), sound)
+  first.clear(); second.clear()
+  await command(first, ctx.view, move, { requestId: accepted.requestId })
+  first.send({ type: 'sync' })
+  await first.next('snapshot')
+  assert.deepEqual(first.sounds(), [])
+  const rejected = await command(first, accepted.view, { type: 'place-stone', position: { row: 0, column: 0 } })
+  assert.equal(rejected.result.ok, false)
+  first.send({ type: 'sync' })
+  await first.next('snapshot')
+  assert.deepEqual(first.sounds(), [])
+  assert.deepEqual(second.sounds(), [])
+  const recovered = await client(ctx.url)
+  recovered.send({ type: 'resume', token: ctx.sessionA.token })
+  await recovered.next('session')
+  await recovered.next('snapshot')
+  recovered.send({ type: 'sync' })
+  await recovered.next('snapshot')
+  assert.deepEqual(recovered.sounds(), [])
 })
 
 test('expiration, invalid messages and origin rejection', { timeout: 10000 }, async (t) => {

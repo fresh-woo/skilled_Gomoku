@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { WebSocketServer, WebSocket } from 'ws'
 import { applyCommand, startGame } from '../src/entities/game/model/game.ts'
 import { applySkillCommand, expireSnipe, ONLINE_SKILL_COUNT, startSkillGame } from '../src/entities/game/model/skillGame.ts'
+import { actionSounds } from '../src/entities/game/model/soundEvents.ts'
 
 export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600_000, origins = [], drawCard = () => randomInt(ONLINE_SKILL_COUNT) } = {}) {
   const rooms = new Map()
@@ -63,6 +64,12 @@ export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600
     }
   }
   function broadcast(room) { for (const member of room.members) send(member.ws, snapshot(room, member)) }
+  function broadcastSounds(room, cues) {
+    if (!cues.length) return
+    for (const member of room.members) {
+      send(member.ws, { type: 'sound', gameId: room.gameId, revision: room.revision, cues })
+    }
+  }
   function settleDefense(room, time) {
     if (!room.skills) return false
     const next = expireSnipe(room.skills, time)
@@ -154,6 +161,7 @@ export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600
       const result = { type: 'result', requestId: msg.requestId, ok: false, code: '', revision: room.revision }
       const action = msg.action
       const game = room.skills?.game ?? room.game
+      let cues = []
       if (member.results.size >= 2048) { fail('HISTORY_FULL'); return }
       if (!game || msg.gameId !== room.gameId) result.code = 'WRONG_GAME'
       else if (msg.revision !== room.revision) result.code = 'STALE_REVISION'
@@ -192,6 +200,8 @@ export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600
             }
             else room.game = transition.state
             room.revision++
+            cues = actionSounds(command.type === 'place-stone' ? 'place'
+              : command.type === 'use-skill' || command.cardId !== undefined ? 'skill' : null)
             result.ok = true
           }
         }
@@ -200,6 +210,7 @@ export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600
       member.results.set(msg.requestId, { fingerprint, result })
       send(ws, result)
       broadcast(room)
+      broadcastSounds(room, cues)
     })
     ws.on('close', () => {
       if (!member || member.ws !== ws || !rooms.has(room.id)) return

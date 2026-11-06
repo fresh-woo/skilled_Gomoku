@@ -1,6 +1,7 @@
 import { MenuNavigation } from './design-system/MenuNavigation'
 import { LocalGame } from './features/local-game/ui/LocalGame'
 import { OnlineGame } from './features/online-game/OnlineGame'
+import { SoundControl } from './features/game-sound/SoundControl'
 import './design-system/tokens.css'
 import './App.css'
 
@@ -24,7 +25,10 @@ function App() {
             </svg>
             Skilled Gomoku
           </a>
-          <MenuNavigation label="주 내비게이션" items={navigationItems} />
+          <div className="site-header__actions">
+            <SoundControl />
+            <MenuNavigation label="주 내비게이션" items={navigationItems} />
+          </div>
         </div>
       </header>
       <main>

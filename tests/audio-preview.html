@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ko">
+<meta charset="utf-8">
+<title>효과음 측정</title>
+<h1>효과음 측정 · 개발 확인용</h1>
+<button id="measure">오디오 측정 실행</button>
+<button id="skill">스킬음 듣기</button>
+<button id="place">착수음 듣기</button>
+<pre id="result">대기 중</pre>
+<script type="module">
+import { GAME_SOUND_GAIN, renderGameSound } from '/src/features/game-sound/synthesis.ts'
+import { playGameSounds, unlockGameSound } from '/src/features/game-sound/audio.ts'
+const result = document.querySelector('#result')
+document.querySelector('#measure').onclick = async () => {
+  try {
+    const measurements = {}
+    for (const cue of ['place', 'skill']) {
+      const context = new OfflineAudioContext(1, 24000, 48000)
+      const master = context.createGain()
+      master.gain.value = GAME_SOUND_GAIN
+      master.connect(context.destination)
+      renderGameSound(context, master, cue, 0.01)
+      const data = (await context.startRendering()).getChannelData(0)
+      let energy = 0, peak = 0, active = 0
+      for (const sample of data) {
+        energy += sample * sample
+        peak = Math.max(peak, Math.abs(sample))
+        if (Math.abs(sample) > 0.005) active++
+      }
+      measurements[cue] = { rms: Math.sqrt(energy / data.length), peak, activeMs: active / 48 }
+    }
+    const { skill, place } = measurements
+    const pass = skill.rms > place.rms && skill.activeMs > 150 && skill.peak < 0.95
+    result.textContent = (pass ? 'PASS' : 'FAIL') + '\n' + JSON.stringify(measurements, null, 2)
+  } catch (error) { result.textContent = 'FAIL\n' + String(error) }
+}
+for (const cue of ['skill', 'place']) document.querySelector('#' + cue).onclick = () => {
+  unlockGameSound()
+  void playGameSounds([cue])
+}
+</script>
+</html>
