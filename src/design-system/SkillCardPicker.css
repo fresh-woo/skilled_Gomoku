@@ -1,0 +1,117 @@
+.skill-card-picker {
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.skill-card-picker legend {
+  margin-block-end: var(--space-2);
+  padding: 0;
+  color: var(--color-muted);
+  font-size: var(--font-size-small);
+}
+
+.skill-card-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 8.375rem), 1fr));
+  gap: var(--space-2);
+}
+
+.play-skill-card {
+  display: flex;
+  min-inline-size: 0;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--skill-card-edge);
+  border-radius: var(--radius-control);
+  color: var(--skill-card-ink);
+  background: var(--skill-card-frame);
+  line-height: 1.35;
+}
+
+.skill-card-picker[data-side='black'], .skill-card-catalog[data-side='black'] {
+  --skill-card-frame: var(--color-skill-black);
+  --skill-card-ink: var(--color-stone-white);
+  --skill-card-paper: var(--color-skill-black-paper);
+  --skill-card-edge: var(--color-skill-black-edge);
+  --skill-card-muted: var(--color-skill-black-muted);
+  --skill-card-accent: var(--color-skill-black-accent);
+}
+
+.skill-card-picker[data-side='white'], .skill-card-catalog[data-side='white'] {
+  --skill-card-frame: var(--color-skill-white);
+  --skill-card-ink: var(--color-accent-pressed);
+  --skill-card-paper: var(--color-skill-white-paper);
+  --skill-card-edge: var(--color-skill-white-edge);
+  --skill-card-muted: var(--color-muted);
+  --skill-card-accent: var(--color-accent);
+}
+
+.play-skill-card:has(input:enabled) { cursor: pointer; }
+.play-skill-card:has(input:checked) { box-shadow: inset 0 0 0 2px var(--skill-card-accent); }
+.play-skill-card:has(input:focus-visible) { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+
+@media (hover: hover) {
+  .play-skill-card:has(input:enabled):hover { border-color: var(--skill-card-accent); }
+}
+
+.play-skill-card__top, .play-skill-card__title {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: var(--space-1);
+}
+
+.play-skill-card__top {
+  align-items: center;
+  color: var(--skill-card-muted);
+  font-size: .75rem;
+  font-weight: var(--font-weight-strong);
+}
+
+.play-skill-card__count {
+  flex: none;
+  padding: 0 var(--space-1);
+  border: 1px solid currentColor;
+  border-radius: var(--space-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.play-skill-card__title { min-block-size: 2.25rem; }
+.play-skill-card__title small, .play-skill-card__copy small {
+  display: block;
+  color: var(--skill-card-muted);
+}
+
+.play-skill-card__title input {
+  flex: none;
+  margin: .15rem .1rem 0 0;
+  accent-color: var(--skill-card-accent);
+}
+
+.play-skill-card__art {
+  aspect-ratio: 1;
+  border: 1px solid var(--skill-card-edge);
+  border-radius: var(--space-1);
+  background-color: var(--skill-card-paper);
+  background-repeat: no-repeat;
+  background-size: 300% auto;
+  forced-color-adjust: none;
+}
+
+.play-skill-card__copy {
+  flex: 1;
+  padding: var(--space-2);
+  border-radius: var(--space-1);
+  background: var(--skill-card-paper);
+  font-size: var(--font-size-small);
+  overflow-wrap: anywhere;
+}
+
+.play-skill-card__copy small {
+  margin-block-start: var(--space-2);
+  padding-block-start: var(--space-1);
+  border-block-start: 1px solid var(--skill-card-edge);
+}

@@ -64,9 +64,9 @@ function App() {
             <p>위 버튼에 마우스를 올리거나 Tab 키로 이동해 스타일을 확인해 보세요.</p>
             <Button disabled>비활성 버튼</Button>
           </section>
-          <LocalGame />
           <OnlineGame />
         </div>
+        <LocalGame />
         <GamePreview />
       </main>
     </>
