@@ -1,6 +1,6 @@
 # Skilled Gomoku
 
-React와 TypeScript로 만드는 온라인 턴제 오목 게임입니다. 현재는 개발을 위한 기본 틀만 준비되어 있으며, 게임 규칙과 온라인 기능은 기획 확정 후 구현합니다.
+React와 TypeScript로 만드는 턴제 오목 게임입니다. 현재 브라우저에서 2인 로컬 대국을 플레이할 수 있습니다.
 
 ## 시작하기
 
@@ -11,10 +11,13 @@ npm ci
 npm run dev
 ```
 
-터미널에 표시된 주소로 접속합니다. 주요 검사 명령:
+터미널에 표시된 주소를 열고 5목 또는 6목을 선택한 뒤 **대국 시작**을 누릅니다. 빈 교차점을 클릭하거나 방향키로 이동해 Enter 또는 Space를 눌러 착수합니다. **새 대국**을 누르면 판이 비워지고 선공이 바뀝니다.
+
+주요 검사 명령입니다.
 
 ```bash
 npm run lint       # 정적 검사
+npm test           # 오목 규칙과 로컬 세션 검사
 npm run build      # 타입 검사와 프로덕션 빌드
 npm run preview    # 빌드 결과 확인 (먼저 build 실행)
 ```
@@ -22,6 +25,8 @@ npm run preview    # 빌드 결과 확인 (먼저 build 실행)
 ## 구조와 작업 기록
 
 가벼운 FSD 구조를 지향하며 실제 필요에 따라 `pages`, `widgets`, `features`, `entities`, `shared`를 추가합니다. 공통 디자인 토큰과 컴포넌트는 `src/design-system`에서 관리합니다. 게임 규칙, 화면, 네트워크 코드는 분리합니다.
+
+기본 규칙은 `src/entities/game`에 있고, 로컬 세션과 대국 화면은 `src/features/local-game`에서 연결합니다.
 
 - [AGENTS.md](AGENTS.md): 채팅 간 공통 작업 원칙
 - [게임 기획](docs/game-spec.md): 게임 방향과 미확정 사항
