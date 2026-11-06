@@ -44,6 +44,8 @@ npm run server
 
 ## 실제 메시지
 
+승인된 착수와 카드 사용에는 별도 `sound` 메시지(`gameId`, `revision`, `cues`)를 현재 연결된 두 플레이어에게 보낸다. 공개 효과 종류만 담고 카드 ID나 손패는 보내지 않는다. 거부·중복 요청에서는 재발행하지 않고 스냅샷에도 넣지 않는다. 클라이언트는 참가/재접속의 첫 스냅샷으로 기준 revision을 잡아 이전 소리와 동일 이벤트를 다시 재생하지 않는다. 오디오 전달은 상태 저장·복구와 독립적이다.
+
 모든 요청은 `v:1`, `requestId`를 포함한다. `src/features/online-game/protocol.ts`가 화면에 전달할 타입을 정의하며 서버는 런타임에서 메시지를 검증한다. 이전 `experiments/websocket/contracts.ts`는 과거 설계 실험이며 실제 API가 아니다.
 
 | 요청 | 필드 | 응답 |
