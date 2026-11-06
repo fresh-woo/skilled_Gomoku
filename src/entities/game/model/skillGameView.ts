@@ -7,7 +7,7 @@ type Response = NonNullable<SkillGame['response']>
 export type SkillView = Pick<SkillGame, 'game' | 'hands' | 'shields' | 'usedStoneSkills' | 'snipeOutcome'> & {
   cardBlocks: Readonly<Record<number, CardBlockReason | null>>
   response: Pick<Response, 'id' | 'targetId'> & (
-    { phase: 'before' | 'after' } | Extract<Response, { phase: 'snipe' }>
+    { phase: 'before' } | Extract<Response, { phase: 'snipe' }>
   ) | null
   augment: {
     choices: readonly AugmentId[]

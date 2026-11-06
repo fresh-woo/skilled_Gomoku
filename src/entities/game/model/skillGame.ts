@@ -8,15 +8,13 @@ import type {
 type TurnStart = Readonly<{ playerId: PlayerId; round: number }>
 
 type Skill =
-  | Readonly<{ kind: 'discard'; response: 'before' | 'after' }>
+  | Readonly<{ kind: 'discard' }>
   | Readonly<{ kind: 'guard' | 'delay'; at: TurnStart }>
-  | Readonly<{ kind: 'cancel' | 'recover' }>
   | Readonly<{ kind: 'snipe' | 'nullify' | 'shield' }>
 
 const onlineSkills: readonly Skill[] = [
   { kind: 'snipe' }, { kind: 'nullify' }, { kind: 'shield' },
-  { kind: 'discard', response: 'before' }, { kind: 'cancel' },
-  { kind: 'recover' }, { kind: 'discard', response: 'after' },
+  { kind: 'discard' },
 ]
 export const ONLINE_SKILL_COUNT = onlineSkills.length
 const fairDrawLimit = 0x100000000 - (0x100000000 % ONLINE_SKILL_COUNT)
@@ -28,7 +26,6 @@ type Card = Readonly<{ id: number; skill: Skill }>
 type Attack = Readonly<{ id: number; targetId: PlayerId }>
 type Response = Attack & (
   | Readonly<{ phase: 'before' }>
-  | Readonly<{ phase: 'after'; discarded: Card }>
   | Readonly<{ phase: 'snipe'; position: Position; deadline: number }>
 )
 type ScheduledEffect = Readonly<{ kind: 'guard' | 'discard'; at: TurnStart; targetId: PlayerId }>
@@ -51,12 +48,12 @@ export type SkillGame = Readonly<{
 
 type SkillCommand = GameCommand
   | Readonly<{ type: 'use-skill'; actorId: PlayerId; cardId: number; targetId?: PlayerId; position?: Position }>
-  | Readonly<{ type: 'respond'; actorId: PlayerId; attackId: number; cardId?: number; discardCardId?: number }>
+  | Readonly<{ type: 'respond'; actorId: PlayerId; attackId: number; cardId?: number }>
   | Readonly<{ type: 'choose-augment'; actorId: PlayerId; augmentId: string; round: number }>
 
 type Rejection = CommandRejection | 'invalid-player-order' | 'response-pending' |
   'invalid-response' | 'card-not-in-hand' | 'invalid-skill-timing' | 'invalid-target' | 'invalid-boundary' |
-  'invalid-nullify-cost' | 'already-shielded' | 'response-expired' | 'skill-used-this-turn' |
+  'already-shielded' | 'response-expired' | 'skill-used-this-turn' |
   'augment-pending' | 'invalid-augment' | 'fortified-target'
 type Transition =
   | Readonly<{ ok: true; state: SkillGame; events: readonly TurnStarted[] }>
@@ -142,19 +139,18 @@ export function fortifiedPlayers(state: Pick<SkillGame, 'game' | 'augments'>): P
   return state.game.players.filter(({ id }) => state.augments[id].includes('fortification')).map(({ id }) => id)
 }
 
-function discard(state: SkillGame, targetId: PlayerId): { state: SkillGame; discarded?: Card } {
+function discard(state: SkillGame, targetId: PlayerId): SkillGame {
   const hand = state.hands[targetId]
-  if (!hand.length) return { state }
+  if (!hand.length) return state
 
   const guardIndex = state.effects.findIndex((effect) => effect.kind === 'guard' && effect.targetId === targetId)
   if (guardIndex !== -1) {
-    return { state: { ...state, effects: state.effects.filter((_, index) => index !== guardIndex) } }
+    return { ...state, effects: state.effects.filter((_, index) => index !== guardIndex) }
   }
 
   const randomSeed = roll(state.randomSeed)
   const index = Math.floor((randomSeed / 0x100000000) * hand.length)
-  const discarded = hand[index]
-  return { state: { ...consume(state, targetId, discarded.id), randomSeed }, discarded }
+  return { ...consume(state, targetId, hand[index].id), randomSeed }
 }
 
 function applyTurnStart(state: SkillGame, event: TurnStarted, drawIndex?: number): SkillGame {
@@ -167,7 +163,7 @@ function applyTurnStart(state: SkillGame, event: TurnStarted, drawIndex?: number
     shields: state.shields.filter(({ expiresRound }) => event.round < expiresRound),
   }
   for (const effect of due) {
-    if (effect.kind === 'discard') next = discard(next, effect.targetId).state
+    if (effect.kind === 'discard') next = discard(next, effect.targetId)
   }
 
   if (next.drawPile) {
@@ -268,14 +264,7 @@ function playSkill(
   }
 
   const next = { ...consume(state, actorId, cardId), snipeOutcome: null }
-  const attack = { id: cardId, targetId }
-  if (skill.response === 'before') return accept({ ...next, response: { ...attack, phase: 'before' } })
-
-  const result = discard(next, targetId)
-  const response: Response | null = result.discarded
-    ? { ...attack, phase: 'after', discarded: result.discarded }
-    : null
-  return accept({ ...result.state, response })
+  return accept({ ...next, response: { id: cardId, targetId, phase: 'before' } })
 }
 
 function resolveSnipe(state: SkillGame, game: PlayingGame, position: Position): SkillGame {
@@ -310,42 +299,29 @@ function respond(
     return { ok: false, reason: 'invalid-response' }
   }
 
-  if (response.phase === 'snipe') {
-    if (now >= response.deadline) return { ok: false, reason: 'response-expired' }
-    if (cardId === undefined) return accept(resolveSnipe(state, game, response.position))
-    const hand = state.hands[actorId]
-    const card = hand.find(({ id }) => id === cardId)
-    if (!card) return { ok: false, reason: 'card-not-in-hand' }
-    if (card.skill.kind !== 'nullify') return { ok: false, reason: 'invalid-skill-timing' }
-    const { discardCardId } = command
-    if (discardCardId === cardId || !hand.some(({ id }) => id === discardCardId)) {
-      return { ok: false, reason: 'invalid-nullify-cost' }
-    }
-    const next = replaceHand(state, actorId, hand.filter(({ id }) => id !== cardId && id !== discardCardId))
-    return accept({ ...next, response: null, snipeOutcome: 'nullified' })
+  if (response.phase === 'snipe' && now >= response.deadline) {
+    return { ok: false, reason: 'response-expired' }
   }
 
   const resumed = { ...state, response: null }
   if (cardId === undefined) {
-    return accept(response.phase === 'before' ? discard(resumed, actorId).state : resumed)
+    return accept(response.phase === 'snipe' ? resolveSnipe(state, game, response.position) : discard(resumed, actorId))
   }
 
   const card = state.hands[actorId].find(({ id }) => id === cardId)
   if (!card) return { ok: false, reason: 'card-not-in-hand' }
 
   const { skill } = card
-  if (response.phase === 'before') {
-    if (skill.kind === 'cancel') return accept(consume(resumed, actorId, cardId))
-    if (skill.kind === 'delay') {
-      if (!isFutureTurnStart(game, skill.at)) return { ok: false, reason: 'invalid-boundary' }
-      return accept({
-        ...consume(resumed, actorId, cardId),
-        effects: [...resumed.effects, { kind: 'discard', at: skill.at, targetId: actorId }],
-      })
-    }
-  } else if (skill.kind === 'recover') {
+  if (skill.kind === 'nullify') {
     const next = consume(resumed, actorId, cardId)
-    return accept(replaceHand(next, actorId, [...next.hands[actorId], response.discarded]))
+    return accept(response.phase === 'snipe' ? { ...next, snipeOutcome: 'nullified' } : next)
+  }
+  if (response.phase === 'before' && skill.kind === 'delay') {
+    if (!isFutureTurnStart(game, skill.at)) return { ok: false, reason: 'invalid-boundary' }
+    return accept({
+      ...consume(resumed, actorId, cardId),
+      effects: [...resumed.effects, { kind: 'discard', at: skill.at, targetId: actorId }],
+    })
   }
   return { ok: false, reason: 'invalid-skill-timing' }
 }
@@ -383,7 +359,6 @@ export function getCardBlockReason(state: SkillGame, actorId: PlayerId, cardId: 
   if (response?.targetId === actorId) {
     const result = applySkillCommand(state, {
       type: 'respond', actorId, attackId: response.id, cardId,
-      discardCardId: hand.find(({ id }) => id !== cardId)?.id,
     }, now)
     return result.ok ? null : result.reason
   }

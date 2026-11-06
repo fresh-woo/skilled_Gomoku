@@ -67,21 +67,18 @@ test('online snipe keeps a private, idempotent defense across reconnect and reso
   assert.deepEqual(restored.skills.response, pending)
   assert.deepEqual(restored.turn, { ...view.turn, phase: 'defend' })
   assert.equal(restored.skills.hands[first], undefined)
-  const [nullify, cost] = restored.skills.hands[second]
-  assert.deepEqual([nullify.skill.kind, cost.skill.kind], ['nullify', 'shield'])
+  const [nullify, shield] = restored.skills.hands[second]
+  assert.deepEqual([nullify.skill.kind, shield.skill.kind], ['nullify', 'shield'])
   assert.equal(restored.skills.cardBlocks[nullify.id], null)
-  assert.equal(restored.skills.cardBlocks[cost.id], 'invalid-skill-timing')
-  assert.deepEqual(Object.keys(restored.skills.cardBlocks), [String(nullify.id), String(cost.id)])
+  assert.equal(restored.skills.cardBlocks[shield.id], 'invalid-skill-timing')
+  assert.deepEqual(Object.keys(restored.skills.cardBlocks), [String(nullify.id), String(shield.id)])
 
   const response = { type: 'respond', attackId: pending.id, cardId: nullify.id }
-  const missing = await command(resumed, restored, response)
-  assert.equal(missing.result.code, 'invalid-nullify-cost')
-  const cancelAction = { ...response, discardCardId: cost.id }
-  const canceled = await command(resumed, restored, cancelAction)
+  const canceled = await command(resumed, restored, response)
   assert.equal(canceled.result.ok, true)
-  const retry = await command(resumed, restored, cancelAction, { requestId: canceled.requestId })
+  const retry = await command(resumed, restored, response, { requestId: canceled.requestId })
   assert.deepEqual(retry.result, canceled.result)
-  assert.equal(retry.view.handCounts[second], 0)
+  assert.deepEqual(retry.view.skills.hands[second], [shield])
   assert.equal(retry.view.skills.snipeOutcome, 'nullified')
   assert.equal(retry.view.turn.phase, 'opponent-turn')
   assert.deepEqual(retry.view.game.turn, view.game.turn)
@@ -120,7 +117,7 @@ test('online snipe keeps a private, idempotent defense across reconnect and reso
   assert.equal(disarm.view.skills.snipeOutcome, null)
   const passed = await command(later, disarm.view, { type: 'respond', attackId: discardCard.id })
   assert.equal(passed.result.ok, true)
-  assert.equal(passed.view.skills.hands[second].length, 0)
+  assert.equal(passed.view.skills.hands[second].length, disarm.view.handCounts[second] - 1)
 })
 async function setup(t, mode = 'five-in-a-row', rules = 'basic', options = {}) {
   const server = createOnlineServer(options)
@@ -268,8 +265,8 @@ test('authority, idempotency, revision race, room capacity, resume and fencing',
 })
 
 test('skill play, private projection, defense and resume do not redraw', { timeout: 15000 }, async (t) => {
-  const draws = [3, 3, 4, 4, 5]
-  const ctx = await setup(t, 'five-in-a-row', 'skills', { drawCard: () => draws.shift() ?? 6 })
+  const draws = [3, 3, 1, 1, 2]
+  const ctx = await setup(t, 'five-in-a-row', 'skills', { drawCard: () => draws.shift() ?? 3 })
   await chooseInitialFortification(ctx)
   let view = ctx.view
   const firstId = view.game.players[0].id
@@ -302,8 +299,15 @@ test('skill play, private projection, defense and resume do not redraw', { timeo
   assert.equal(rejected.result.code, 'response-pending')
   second.send({ type: 'sync' })
   const defenseView = await second.next('snapshot', (m) => m.revision === view.revision && !!m.skills.response)
-  const defense = defenseView.skills.hands[secondId].find((c) => c.skill.kind === 'cancel')
-  view = (await command(second, view, { type: 'respond', attackId: view.skills.response.id, cardId: defense.id })).view
+  const defense = defenseView.skills.hands[secondId].find((c) => c.skill.kind === 'nullify')
+  assert.equal(defenseView.skills.cardBlocks[defense.id], null)
+  const reply = { type: 'respond', attackId: view.skills.response.id, cardId: defense.id }
+  const accepted = await command(second, view, reply)
+  assert.equal(accepted.result.ok, true)
+  const replayed = await command(second, view, reply, { requestId: accepted.requestId })
+  assert.deepEqual(replayed.result, accepted.result)
+  view = accepted.view
+  assert.deepEqual(view.skills.hands[secondId], defenseView.skills.hands[secondId].filter((c) => c.id !== defense.id))
   assert.deepEqual((await second.next('sound', (message) => message.revision === view.revision)).cues, ['skill'])
   assert.equal(view.skills.response, null)
   assert.equal(view.game.players[view.game.turn.activeSeat].id, firstId)
@@ -315,6 +319,7 @@ test('skill play, private projection, defense and resume do not redraw', { timeo
   const restored = await restore.next('snapshot')
   checkPrivacy(restored)
   assert.deepEqual(restored.handCounts, view.handCounts)
+  assert.deepEqual(restored.skills.hands[secondId], view.skills.hands[secondId])
   assert.equal(restored.revision, view.revision)
 })
 

@@ -183,9 +183,8 @@ export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600
               position: point && { row: point.row, column: point.column } }
           }
         } else if (action.type === 'respond' && Number.isSafeInteger(action.attackId) &&
-          (action.cardId === undefined || Number.isSafeInteger(action.cardId)) &&
-          (action.discardCardId === undefined || Number.isSafeInteger(action.discardCardId))) {
-          command = { type: action.type, actorId: member.id, attackId: action.attackId, cardId: action.cardId, discardCardId: action.discardCardId }
+          (action.cardId === undefined || Number.isSafeInteger(action.cardId))) {
+          command = { type: action.type, actorId: member.id, attackId: action.attackId, cardId: action.cardId }
         } else if (action.type === 'choose-augment' && typeof action.augmentId === 'string' && Number.isSafeInteger(action.round)) {
           command = { type: action.type, actorId: member.id, augmentId: action.augmentId, round: action.round }
         }

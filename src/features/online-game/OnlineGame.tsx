@@ -25,7 +25,6 @@ const errors: Record<string, string> = {
   'not-active-player': '지금은 상대 차례예요.',
   'response-pending': '방어 응답이 끝날 때까지 기다려 주세요.',
   'response-expired': '방어 응답 시간이 지났어요.',
-  'invalid-nullify-cost': '무효화와 함께 버릴 다른 카드 1장을 골라 주세요.',
   'invalid-target': '이 카드의 대상이 될 수 없는 돌이에요.',
   'already-shielded': '이미 보호막이 있는 돌이에요.',
   'skill-used-this-turn': '이번 턴에 이미 사용한 카드 종류예요.',
@@ -216,14 +215,13 @@ export function OnlineGame() {
         {Boolean(augment?.owned.length) && <p>내 증강 · {augment?.owned.map((id) => AUGMENTS[id].title).join(', ')}</p>}
         {response?.phase === 'snipe' && <SnipeNotice position={response.position} deadline={response.deadline - view.serverTime + view.receivedAt} />}
         {response?.phase === 'before' && <GameNotice>무장해제 적용 전에 방어할 수 있어요.</GameNotice>}
-        {response?.phase === 'after' && <GameNotice>무장해제로 버린 카드를 복구할 수 있어요.</GameNotice>}
         {view.skills.snipeOutcome && <SnipeOutcome outcome={view.skills.snipeOutcome} />}
         <p>상대 손패 {Object.entries(view.handCounts).find(([id]) => id !== view.playerId)?.[1] ?? 0}장</p>
         <fieldset disabled={!canAct}>
           <OnlineSkillHand state={view.skills} playerId={view.playerId} side={view.playerId === 'black' ? 'black' : 'white'}
             uiBlock={!connected ? '연결이 복구되면 사용할 수 있어요.' : busy ? '이전 행동을 처리하고 있어요.' : undefined}
             onTarget={setTarget} onAction={(action) => {
-            if (response) act({ type: 'respond', attackId: response.id, ...(action.type === 'card' ? { cardId: action.cardId, discardCardId: action.discardCardId } : {}) })
+            if (response) act({ type: 'respond', attackId: response.id, ...(action.type === 'card' ? { cardId: action.cardId } : {}) })
             else if (action.type === 'card') act({ type: 'use-skill', cardId: action.cardId })
           }} />
         </fieldset>

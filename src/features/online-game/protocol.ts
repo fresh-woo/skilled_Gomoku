@@ -4,7 +4,7 @@ import type { OnlineTurn } from '../../entities/game/model/onlineTurn'
 export type OnlineAction =
   | { type: 'place-stone'; position: Position }
   | { type: 'use-skill'; cardId: number; position?: Position }
-  | { type: 'respond'; attackId: number; cardId?: number; discardCardId?: number }
+  | { type: 'respond'; attackId: number; cardId?: number }
   | { type: 'choose-augment'; augmentId: string; round: number }
 export type Snapshot = {
   type: 'snapshot'; v: 1; roomId: string; gameId: string; revision: number; serverTime: number
