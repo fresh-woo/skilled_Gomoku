@@ -1,10 +1,11 @@
-import { fortifiedPlayers } from './skillGame.ts'
-import type { SkillGame } from './skillGame.ts'
+import { fortifiedPlayers, getCardBlockReason } from './skillGame.ts'
+import type { CardBlockReason, SkillGame } from './skillGame.ts'
 import type { AugmentId } from './augments.ts'
 import type { PlayerId } from './game.ts'
 
 type Response = NonNullable<SkillGame['response']>
 export type SkillView = Pick<SkillGame, 'game' | 'hands' | 'shields' | 'usedStoneSkills' | 'snipeOutcome'> & {
+  cardBlocks: Readonly<Record<number, CardBlockReason | null>>
   response: Pick<Response, 'id' | 'targetId'> & (
     { phase: 'before' | 'after' } | Extract<Response, { phase: 'snipe' }>
   ) | null
@@ -16,11 +17,12 @@ export type SkillView = Pick<SkillGame, 'game' | 'hands' | 'shields' | 'usedSton
   }
 }
 
-export function projectSkillGame(state: SkillGame, viewer: PlayerId): SkillView {
+export function projectSkillGame(state: SkillGame, viewer: PlayerId, now: number): SkillView {
   const response = state.response
   return {
     game: state.game,
     hands: { [viewer]: state.hands[viewer] },
+    cardBlocks: Object.fromEntries(state.hands[viewer].map(({ id }) => [id, getCardBlockReason(state, viewer, id, now)])),
     response: response ? {
       id: response.id, targetId: response.targetId,
       ...(response.phase === 'snipe'

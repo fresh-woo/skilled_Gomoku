@@ -213,7 +213,9 @@ export function OnlineGame() {
         {view.skills.snipeOutcome && <SnipeOutcome outcome={view.skills.snipeOutcome} />}
         <p>상대 손패 {Object.entries(view.handCounts).find(([id]) => id !== view.playerId)?.[1] ?? 0}장</p>
         <fieldset disabled={!canAct}>
-          <OnlineSkillHand state={view.skills} playerId={view.playerId} side={view.playerId === 'black' ? 'black' : 'white'} onTarget={setTarget} onAction={(action) => {
+          <OnlineSkillHand state={view.skills} playerId={view.playerId} side={view.playerId === 'black' ? 'black' : 'white'}
+            uiBlock={!connected ? '연결이 복구되면 사용할 수 있어요.' : busy ? '이전 행동을 처리하고 있어요.' : undefined}
+            onTarget={setTarget} onAction={(action) => {
             if (response) act({ type: 'respond', attackId: response.id, ...(action.type === 'card' ? { cardId: action.cardId, discardCardId: action.discardCardId } : {}) })
             else if (action.type === 'card') act({ type: 'use-skill', cardId: action.cardId })
           }} />

@@ -62,6 +62,8 @@ type Transition =
   | Readonly<{ ok: true; state: SkillGame; events: readonly TurnStarted[] }>
   | Readonly<{ ok: false; reason: Rejection }>
 
+export type CardBlockReason = Rejection | 'no-skill-target'
+
 function accept(state: SkillGame, events: readonly TurnStarted[] = []): Transition {
   return { ok: true, state, events }
 }
@@ -370,4 +372,32 @@ export function applySkillCommand(state: SkillGame, command: SkillCommand, now =
   const next: SkillGame = { ...state, game: result.state, usedStoneSkills: [], snipeOutcome: null }
   if (result.state.status === 'finished') return accept({ ...next, effects: [], shields: [] }, result.events)
   return accept(result.events.reduce((current, event) => applyTurnStart(current, event, drawIndex), next), result.events)
+}
+
+export function getCardBlockReason(state: SkillGame, actorId: PlayerId, cardId: number, now: number): CardBlockReason | null {
+  const hand = state.hands[actorId] ?? []
+  const card = hand.find(({ id }) => id === cardId)
+  if (!card) return 'card-not-in-hand'
+
+  const { response } = state
+  if (response?.targetId === actorId) {
+    const result = applySkillCommand(state, {
+      type: 'respond', actorId, attackId: response.id, cardId,
+      discardCardId: hand.find(({ id }) => id !== cardId)?.id,
+    }, now)
+    return result.ok ? null : result.reason
+  }
+
+  const { kind } = card.skill
+  const targetId = kind === 'guard' ? actorId : state.game.players.find(({ id }) => id !== actorId)?.id
+  const command = { type: 'use-skill', actorId, cardId, targetId } as const
+  const result = applySkillCommand(state, command, now)
+  if (result.ok) return null
+  if (result.reason !== 'invalid-target' || (kind !== 'snipe' && kind !== 'shield')) return result.reason
+  if (state.usedStoneSkills.includes(kind)) return 'skill-used-this-turn'
+
+  const canPlay = state.game.board.cells.some((line, row) => line.some((stone, column) =>
+    stone && applySkillCommand(state, { ...command, position: { row, column } }, now).ok,
+  ))
+  return canPlay ? null : 'no-skill-target'
 }
