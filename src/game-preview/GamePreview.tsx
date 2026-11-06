@@ -185,7 +185,7 @@ export function GamePreview() {
         </ul>
         <details><summary>스킬카드 {skillCards.length}종</summary>
           <dl className="match-catalog">{skillCards.map((item) => <div key={item.id}><dt>{item.title} <span className="game-tag" data-kind={item.kind}>{item.kind}</span></dt><dd>{item.description}</dd></div>)}</dl>
-          <p>버프와 특수 카드의 개별 효과는 미정입니다.</p>
+          <p>카드 효과 설명을 모은 목록입니다. 테스트 대국에서 사용할 수 있는 카드는 실제 손패에 표시됩니다.</p>
         </details>
         <details><summary>증강 {augments.length}종</summary>
           <dl className="match-catalog">{augments.map((item) => <div key={item.id}><dt>{item.title}</dt><dd>{item.description}</dd></div>)}</dl>

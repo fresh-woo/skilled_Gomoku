@@ -10,6 +10,7 @@ import type { SkillGame } from '../../../entities/game/model/skillGame'
 import { applyLocalSkillAction, LOCAL_PLAYER_IDS, placeLocalStone, startLocalGame, startLocalSkillGame } from '../model/localGame'
 import type { LocalSkillAction } from '../model/localGame'
 import { LocalSkillHand } from './LocalSkillHand'
+import { SkillCatalogButton } from '../../skill-catalog/SkillCatalog'
 import './LocalGame.css'
 
 const modeOptions = (Object.keys(WIN_LENGTH) as GameMode[]).map((mode) => ({
@@ -109,33 +110,43 @@ export function LocalGame() {
 
   return (
     <section aria-labelledby="local-game-title" className="local-game" id="local-game">
-      <h2 id="local-game-title">로컬 2인 대국</h2>
-      <GameChoices
-        name="local-game-mode"
-        legend={game ? '새 대국 모드' : '승리 모드'}
-        options={modeOptions}
-        value={mode}
-        onChange={(value) => setMode(value as GameMode)}
-      />
-      <GameChoices name="local-game-rules" legend="대국 규칙" options={ruleOptions} value={rules} onChange={setRules} />
-      <Button onClick={start}>{game ? '새 대국' : '대국 시작'}</Button>
-      <GameNotice>
-        {skills && '스킬 테스트 · '}{gameStatus(game)}
-        {response && ` · ${stoneLabel(response.targetId)} 방어 응답 대기`}
-      </GameNotice>
-      {skills?.feedback && (
-        <GameNotice tone={skills.feedback.error ? 'error' : 'info'} alert={skills.feedback.error}>
-          {skills.feedback.text}
-        </GameNotice>
-      )}
-      {skills && <LocalSkillHand state={skills.state} playerLabel={stoneLabel} onAction={act} />}
-      {game && (
-        <GomokuBoard
-          cells={boardCells(game.board)}
-          size={game.board.size}
-          isSelectable={({ row, column }) => game.status === 'playing' && !response && game.board.cells[row][column] === null}
-          onSelect={place}
+      <div className="local-game__setup">
+        <h2 id="local-game-title">로컬 2인 대국</h2>
+        <GameChoices
+          name="local-game-mode"
+          legend={game ? '새 대국 모드' : '승리 모드'}
+          options={modeOptions}
+          value={mode}
+          onChange={(value) => setMode(value as GameMode)}
         />
+        <GameChoices name="local-game-rules" legend="대국 규칙" options={ruleOptions} value={rules} onChange={setRules} />
+        <div className="local-game__actions">
+          <Button onClick={start}>{game ? '새 대국' : '대국 시작'}</Button>
+          <SkillCatalogButton />
+        </div>
+        <GameNotice>
+          {skills && '스킬 테스트 · '}{gameStatus(game)}
+          {response && ` · ${stoneLabel(response.targetId)} 방어 응답 대기`}
+        </GameNotice>
+        {skills?.feedback && (
+          <GameNotice tone={skills.feedback.error ? 'error' : 'info'} alert={skills.feedback.error}>
+            {skills.feedback.text}
+          </GameNotice>
+        )}
+      </div>
+      {game && (
+        <div className="local-game__table" data-skills={Boolean(skills)}>
+          {skills && <LocalSkillHand state={skills.state} playerId={LOCAL_PLAYER_IDS[0]} side="black" onAction={act} />}
+          <div className="local-game__board">
+            <GomokuBoard
+              cells={boardCells(game.board)}
+              size={game.board.size}
+              isSelectable={({ row, column }) => game.status === 'playing' && !response && game.board.cells[row][column] === null}
+              onSelect={place}
+            />
+          </div>
+          {skills && <LocalSkillHand state={skills.state} playerId={LOCAL_PLAYER_IDS[1]} side="white" onAction={act} />}
+        </div>
       )}
     </section>
   )

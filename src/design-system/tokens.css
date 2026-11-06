@@ -27,6 +27,14 @@
   --color-board-ink: #654c2b;
   --color-stone-black: #232c27;
   --color-stone-white: #fffbf1;
+  --color-skill-black: #232c2a;
+  --color-skill-black-paper: #303b36;
+  --color-skill-black-edge: #8e8061;
+  --color-skill-black-muted: #e1d4b6;
+  --color-skill-black-accent: #efcb7d;
+  --color-skill-white: #f6eed8;
+  --color-skill-white-paper: #fffbf1;
+  --color-skill-white-edge: #8a896b;
   --color-warning: #68420a;
   --color-warning-soft: #fbefd6;
   --color-error: #8b302b;
