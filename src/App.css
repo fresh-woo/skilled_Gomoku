@@ -1,0 +1,4 @@
+.welcome { width: min(100% - 3rem, 42rem); margin: auto; padding: 4rem 0; }
+.welcome__label { color: var(--color-accent); font-size: 0.8rem; font-weight: 700; letter-spacing: 0.12em; }
+h1 { font-size: clamp(2.25rem, 7vw, 4rem); line-height: 1.15; margin: 0.75rem 0 1rem; }
+p { line-height: 1.7; }
