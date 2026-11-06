@@ -1,0 +1,15 @@
+.skill-catalog__filters,
+.skill-catalog__filters > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.skill-catalog__filters { justify-content: space-between; }
+.skill-catalog__filters .button[aria-pressed='true'] {
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
+}
+.skill-catalog__total { margin: var(--space-3) 0 var(--space-2); color: var(--color-muted); }
+.skill-card-catalog { margin: 0; padding: 0; list-style: none; }
+.skill-card-catalog .play-skill-card__title { min-block-size: 0; }

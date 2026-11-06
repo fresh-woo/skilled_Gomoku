@@ -142,7 +142,7 @@ export function OnlineGame() {
       {view.skills && <>
         <p>상대 손패 {Object.entries(view.handCounts).find(([id]) => id !== view.playerId)?.[1] ?? 0}장</p>
         <fieldset disabled={!canAct} style={{ border: 0, padding: 0 }}>
-          <LocalSkillHand state={view.skills} viewerId={view.playerId} playerLabel={label} onAction={(action) => {
+          <LocalSkillHand state={view.skills} playerId={view.playerId} side={view.playerId === 'black' ? 'black' : 'white'} showWhenWaiting onAction={(action) => {
             if (response) act({ type: 'respond', attackId: response.id, ...(action.type === 'card' ? { cardId: action.cardId } : {}) })
             else if (action.type === 'card') act({ type: 'use-skill', cardId: action.cardId })
           }} />
