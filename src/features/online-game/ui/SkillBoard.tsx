@@ -9,19 +9,11 @@ import { isFortified } from '../../../entities/game/model/augments'
 import { canTargetStone } from '../../../entities/game/model/skillGame'
 import type { SkillView } from '../../../entities/game/model/skillGameView'
 import type { SelectedStoneSkill } from './OnlineSkillHand'
-import { Countdown } from './Countdown'
 
 const snipeMessages = {
   destroyed: '저격으로 돌이 파괴됐어요.',
   shielded: '보호막이 저격을 막고 사라졌어요.',
   nullified: '무효화로 저격을 막았어요.',
-}
-
-export function SnipeNotice({ position, deadline }: { position: Position; deadline: number }) {
-  return <>
-    <GameNotice>{boardCoordinate(position)} 돌이 저격 대상이에요. 방어자는 무효화하거나 건너뛸 수 있어요.</GameNotice>
-    <Countdown label="방어 남은 시간" deadline={deadline} />
-  </>
 }
 
 export function SnipeOutcome({ outcome }: { outcome: NonNullable<SkillView['snipeOutcome']> }) {
@@ -33,7 +25,7 @@ export function SkillBoard({ game, skills, target, canAct, color, onSelect, onCa
   skills?: SkillView | null
   target?: SelectedStoneSkill | null
   canAct: boolean
-  color: (id: PlayerId) => StoneColor
+  color: (id: PlayerId) => StoneColor | undefined
   onSelect: (position: Position) => void
   onCancel: () => void
 }) {

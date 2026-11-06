@@ -12,6 +12,7 @@
 ## 대국 UI 사용법
 
 - 온라인 턴 표시는 서버 스냅샷의 `turn.phase`를 사용한다. 판 위 `data-turn-phase`에는 `my-turn`, `opponent-turn`, `defend`, `waiting-defense`, `choose-augment`가 들어간다. `activePlayerId`는 방어 중에도 턴의 주인을 나타낸다. 연결과 명령 전송 중 안내는 이 값과 별도로 표시한다.
+- 온라인 돌과 손패 색상은 서버 스냅샷의 `members[].color`를 사용한다. 방어자는 `skills.response`가 열려 있는 동안 공통 `GameNotice`에서 공격 이름을 확인할 수 있다.
 - 온라인 손패는 본인에게만 전송되는 `skills.cardBlocks[cardId]`를 사용한다. 값이 `null`이면 사용 가능하며, 그 외에는 서버가 판정한 사유를 표시한다. `SkillCardPicker`의 `data-card-state`는 `available` 또는 `unavailable`이다.
 - 온라인 결과는 `game.result`와 본인 ID를 비교해 공통 `Modal`에서 승리·패배·무승부로 표시한다. 재대결 대기는 서버의 `members[].ready`를 사용하고, 새 게임 ID가 도착하면 이전 결과 모달을 닫는다.
 - 스킬 대국 턴 시계는 스냅샷의 `turnClock`과 `serverTime`을 사용한다. `deadline`이 없으면 서버가 보관한 `remainingMs`를 표시한다. 저격 방어 시계는 턴 시계와 별도 이름을 쓰며, 둘 다 매초 알림을 읽지 않는 타이머로 표시한다.

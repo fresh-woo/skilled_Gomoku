@@ -153,10 +153,10 @@ function discard(state: SkillGame, targetId: PlayerId): SkillGame {
   return { ...consume(state, targetId, hand[index].id), randomSeed }
 }
 
-function applyTurnStart(state: SkillGame, event: TurnStarted, drawIndex?: number): SkillGame {
+function applyTurnStart(state: SkillGame, event: TurnStarted, drawIndex?: () => number): SkillGame {
   const isDue = ({ at }: ScheduledEffect) => at.round === event.round && at.playerId === event.playerId
   const due = state.effects.filter(isDue)
-  // For this scenario, expired guards leave before delayed effects run, then the turn grants a card.
+  // Expire guards before delayed effects, then grant a card if this turn is eligible.
   let next: SkillGame = {
     ...state,
     effects: state.effects.filter((effect) => !isDue(effect)),
@@ -170,8 +170,9 @@ function applyTurnStart(state: SkillGame, event: TurnStarted, drawIndex?: number
     const skill = next.drawPile[next.nextDraw]
     return skill ? grantCard(next, event.playerId, skill) : next
   }
-  if (drawIndex !== undefined) {
-    const skill = onlineSkills[drawIndex]
+  if (event.round % 2 !== 0) return next
+  if (drawIndex) {
+    const skill = onlineSkills[drawIndex()]
     return skill ? grantCard(next, event.playerId, skill) : next
   }
   const { skill, randomSeed } = drawOnlineCard(next.randomSeed)
@@ -183,7 +184,6 @@ export function startSkillGame(
   players: readonly PlayerId[],
   drawPile: readonly Skill[] | null,
   randomSeed: number,
-  drawIndex?: number,
 ): Transition {
   const start = startGame(mode, players)
   if (!start.ok) return start
@@ -202,7 +202,7 @@ export function startSkillGame(
     augments: Object.fromEntries(players.map((id) => [id, []])),
     augmentOffer: null,
   }
-  return accept(start.events.reduce((next, event) => applyTurnStart(next, event, drawIndex), state), start.events)
+  return accept(start.events.reduce((next, event) => applyTurnStart(next, event), state), start.events)
 }
 
 function isFutureTurnStart(game: PlayingGame, at: TurnStart): boolean {
@@ -326,7 +326,7 @@ function respond(
   return { ok: false, reason: 'invalid-skill-timing' }
 }
 
-export function applySkillCommand(state: SkillGame, command: SkillCommand, now = 0, drawIndex?: number): Transition {
+export function applySkillCommand(state: SkillGame, command: SkillCommand, now = 0, drawIndex?: () => number): Transition {
   const game = state.game
   if (game.status === 'finished') return { ok: false, reason: 'game-finished' }
   if (command.type === 'choose-augment') {

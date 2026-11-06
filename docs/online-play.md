@@ -38,7 +38,7 @@ npm run server
 
 ## 규칙과 서버 경계
 
-`server/index.mjs`는 Node 24의 TypeScript 지원으로 `game.ts`의 `startGame/applyCommand`, `skillGame.ts`의 `startSkillGame/applySkillCommand`를 호출한다. 온라인 스킬 대국은 매 턴 시작에 네 카드 중 한 장을 같은 확률로 지급한다. 무장해제는 방어자가 적용 전에 응답하거나 건너뛸 때까지 기다린다. 무효화로 저격과 무장해제를 막으면 무효화 카드만 소모한다.
+`server/index.mjs`는 Node 24의 TypeScript 지원으로 `game.ts`의 `startGame/applyCommand`, `skillGame.ts`의 `startSkillGame/applySkillCommand`를 호출한다. 온라인 스킬 대국은 2·4·6라운드 등 짝수 라운드에 두 플레이어가 각자 자기 턴을 시작할 때 네 카드 중 한 장을 같은 확률로 지급한다. 방어자는 응답 상태에서 저격 또는 무장해제 알림을 받는다. 무장해제는 방어자가 적용 전에 응답하거나 건너뛸 때까지 기다린다. 무효화로 저격과 무장해제를 막으면 무효화 카드만 소모한다.
 
 스킬 대국 턴은 20초다. 서버가 증강 선택과 방어 응답 중에 남은 시간을 보관하며, 재접속해도 기한이 유지된다. 기한에 도달하면 서버가 공통 착수 규칙으로 빈칸에 돌을 놓고 결과를 두 플레이어에게 전송한다. 저격의 15초 방어 기한은 턴 시계와 별개다.
 

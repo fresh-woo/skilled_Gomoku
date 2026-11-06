@@ -1,4 +1,5 @@
 import type { GameState, Position } from '../../entities/game/model/game'
+import type { StoneColor } from '../../design-system/board-model'
 import type { SkillView } from '../../entities/game/model/skillGameView'
 import type { OnlineTurn, OnlineTurnClock } from '../../entities/game/model/onlineTurn'
 export type OnlineAction =
@@ -9,7 +10,7 @@ export type OnlineAction =
 export type Snapshot = {
   type: 'snapshot'; v: 1; roomId: string; gameId: string; revision: number; serverTime: number
   playerId: string; mode: string; rules: string
-  members: { id: string; connected: boolean; ready: boolean }[]
+  members: { id: string; color: StoneColor | null; connected: boolean; ready: boolean }[]
   game: GameState | null; skills: SkillView | null
   turn: OnlineTurn
   turnClock: OnlineTurnClock | null

@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { Button } from '../../design-system/Button'
 import { GameChoices, GameNotice } from '../../design-system/GameControls'
 import { Modal } from '../../design-system/Modal'
+import { boardCoordinate } from '../../design-system/board-model'
+import type { StoneColor } from '../../design-system/board-model'
 import { OnlineSkillHand } from './ui/OnlineSkillHand'
 import type { SelectedStoneSkill } from './ui/OnlineSkillHand'
-import { SkillBoard, SnipeNotice, SnipeOutcome } from './ui/SkillBoard'
+import { SkillBoard, SnipeOutcome } from './ui/SkillBoard'
 import { Countdown } from './ui/Countdown'
 import { SkillCatalogButton } from '../skill-catalog/SkillCatalog'
 import { AUGMENTS } from '../../entities/game/model/augments'
@@ -44,6 +46,7 @@ const turnLabels = {
   'waiting-defense': '상대 방어 대기',
   'choose-augment': '증강 선택 중',
 } as const
+const colorLabel = (color?: StoneColor | null) => color === 'black' ? '흑돌' : color === 'white' ? '백돌' : '색상 배정 대기'
 function storedToken() { try { return sessionStorage.getItem(storageKey) } catch { return null } }
 function saveToken(token: string | null) {
   try { if (token) sessionStorage.setItem(storageKey, token); else sessionStorage.removeItem(storageKey) } catch { /* Memory reconnection still works. */ }
@@ -147,11 +150,11 @@ export function OnlineGame() {
   const myDefense = turn?.phase === 'defend'
   const canAct = connected && !busy && (myDefense || myTurn)
   const canDefend = myDefense && canAct
-  const label = (id: string) => id === 'black' ? '흑돌' : '백돌'
+  const me = view?.members.find((member) => member.id === view.playerId)
   const finished = game?.status === 'finished'
   const resultTitle = finished && (game.result.kind === 'draw' ? '무승부'
     : game.result.winnerId === view?.playerId ? '승리' : '패배')
-  const rematchReady = view?.members.find((member) => member.id === view.playerId)?.ready
+  const rematchReady = me?.ready
   const showResult = finished && view && dismissedResult !== view.gameId
 
   return <section className="local-game" id="online-game" aria-labelledby="online-title">
@@ -174,8 +177,8 @@ export function OnlineGame() {
       {error && !view?.skills && <GameNotice tone="error" alert>{error}</GameNotice>}
       {view && <>
         <p>방 코드: <strong style={{ overflowWrap: 'anywhere' }}>{view.roomId}</strong></p>
-        <p>나는 {label(view.playerId)} · {onlineRules.find(({ id }) => id === view.rules)?.title} · {view.mode === 'six-in-a-row' ? '6목' : '5목'}</p>
-        <p>{view.members.map((m) => `${label(m.id)} ${m.connected ? '접속' : '재접속 대기'}${m.ready ? ' · 재대국 준비' : ''}`).join(' / ')}</p>
+        <p>나는 {colorLabel(me?.color)} · {onlineRules.find(({ id }) => id === view.rules)?.title} · {view.mode === 'six-in-a-row' ? '6목' : '5목'}</p>
+        <p>{view.members.map((m) => `${colorLabel(m.color)} ${m.connected ? '접속' : '재접속 대기'}${m.ready ? ' · 재대국 준비' : ''}`).join(' / ')}</p>
         {!game && <p>두 번째 플레이어가 참가하면 대국이 시작됩니다.</p>}
         {finished && <>
           <GameNotice>대국 종료 · {resultTitle}</GameNotice>
@@ -203,6 +206,10 @@ export function OnlineGame() {
           </GameNotice>
           </div>
         )}
+        {myDefense && response && <GameNotice tone="warning" alert>
+          상대가 <strong>{response.phase === 'snipe' ? '저격' : '무장해제'}</strong> 스킬을 사용했어요.
+          {response.phase === 'snipe' && <> 대상은 {boardCoordinate(response.position)} 돌이에요.</>}
+        </GameNotice>}
         {view?.turnClock && <Countdown label="턴 남은 시간" {...(view.turnClock.deadline === null
           ? view.turnClock
           : { deadline: view.turnClock.deadline - view.serverTime + view.receivedAt })} />}
@@ -211,19 +218,19 @@ export function OnlineGame() {
           <AugmentChoice key={`${view?.gameId}-${game.turn.round}`} choices={augment.choices} disabled={!connected || busy}
             onChoose={(augmentId) => act({ type: 'choose-augment', augmentId, round: game.turn.round })} />
         )}
-        <SkillBoard game={game} skills={view?.skills} target={target} color={(id) => id === 'black' ? 'black' : 'white'} canAct={Boolean(canAct)}
+        <SkillBoard game={game} skills={view?.skills} target={target}
+          color={(id) => view?.members.find((member) => member.id === id)?.color ?? undefined} canAct={Boolean(canAct)}
           onSelect={(position) => act(target ? { type: 'use-skill', cardId: target.cardId, position } : { type: 'place-stone', position })}
           onCancel={() => setTarget(null)} />
       </div>
-      {view?.skills && <div className="local-game__hands" id="online-skill-hand" tabIndex={-1}>
+      {view?.skills && me?.color && <div className="local-game__hands" id="online-skill-hand" tabIndex={-1}>
         {error && !augment?.pending && <GameNotice tone="error" alert>{error}</GameNotice>}
         {Boolean(augment?.owned.length) && <p>내 증강 · {augment?.owned.map((id) => AUGMENTS[id].title).join(', ')}</p>}
-        {response?.phase === 'snipe' && <SnipeNotice position={response.position} deadline={response.deadline - view.serverTime + view.receivedAt} />}
-        {response?.phase === 'before' && <GameNotice>무장해제 적용 전에 방어할 수 있어요.</GameNotice>}
+        {response?.phase === 'snipe' && <Countdown label="방어 남은 시간" deadline={response.deadline - view.serverTime + view.receivedAt} />}
         {view.skills.snipeOutcome && <SnipeOutcome outcome={view.skills.snipeOutcome} />}
         <p>상대 손패 {Object.entries(view.handCounts).find(([id]) => id !== view.playerId)?.[1] ?? 0}장</p>
         <fieldset disabled={!canAct}>
-          <OnlineSkillHand state={view.skills} playerId={view.playerId} side={view.playerId === 'black' ? 'black' : 'white'}
+          <OnlineSkillHand state={view.skills} playerId={view.playerId} side={me.color}
             uiBlock={!connected ? '연결이 복구되면 사용할 수 있어요.' : busy ? '이전 행동을 처리하고 있어요.' : undefined}
             onTarget={setTarget} onAction={(action) => {
             if (response) act({ type: 'respond', attackId: response.id, ...(action.type === 'card' ? { cardId: action.cardId } : {}) })
