@@ -3,6 +3,7 @@ import { Button } from './design-system/Button'
 import { MenuNavigation } from './design-system/MenuNavigation'
 import { GamePreview } from './game-preview/GamePreview'
 import { LocalGame } from './features/local-game/ui/LocalGame'
+import { OnlineGame } from './features/online-game/OnlineGame'
 import './design-system/tokens.css'
 import './App.css'
 
@@ -10,6 +11,7 @@ const navigationItems = [
   { href: '#welcome', label: '시작 화면' },
   { href: '#game-preview', label: '대국 미리보기' },
   { href: '#local-game', label: '로컬 대국' },
+  { href: '#online-game', label: '온라인 대국' },
   { href: '#preview-button', label: '디자인 미리보기' },
 ]
 
@@ -63,6 +65,7 @@ function App() {
             <Button disabled>비활성 버튼</Button>
           </section>
           <LocalGame />
+          <OnlineGame />
         </div>
         <GamePreview />
       </main>

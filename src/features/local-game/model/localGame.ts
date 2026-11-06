@@ -1,6 +1,7 @@
-import { applyCommand, BOARD_SIZE, startGame } from '../../../entities/game/model/game.ts'
+import { applyCommand, startGame } from '../../../entities/game/model/game.ts'
 import type { GameMode, GameState, Position } from '../../../entities/game/model/game.ts'
-import { applySkillCommand, startSkillGame } from '../../../entities/game/model/skillGame.ts'
+import { applySkillCommand } from '../../../entities/game/model/skillGame.ts'
+import { startTestSkillGame } from '../../../entities/game/model/testSkillScenario.ts'
 import type { SkillGame } from '../../../entities/game/model/skillGame.ts'
 
 export const LOCAL_PLAYER_IDS = ['player-1', 'player-2'] as const
@@ -18,20 +19,9 @@ export function startLocalGame(mode: GameMode, previousGame: GameState | null, r
   return startGame(mode, turnOrder(previousGame, random))
 }
 
-const testCardCycle = [
-  { kind: 'discard', response: 'before' },
-  { kind: 'cancel' },
-  { kind: 'recover' },
-  { kind: 'discard', response: 'after' },
-] as const
-
 export function startLocalSkillGame(mode: GameMode, previousGame: GameState | null, random = Math.random) {
   const players = turnOrder(previousGame, random)
-  // Both seats draw the same card type in each round of this test mode.
-  const deck = Array.from({ length: BOARD_SIZE ** 2 }, (_, index) =>
-    testCardCycle[Math.floor(index / players.length) % testCardCycle.length],
-  )
-  return startSkillGame(mode, players, deck, Math.floor(random() * 0x100000000))
+  return startTestSkillGame(mode, players, Math.floor(random() * 0x100000000))
 }
 
 export type LocalSkillAction =

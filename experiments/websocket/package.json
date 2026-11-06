@@ -1,0 +1,12 @@
+{
+  "name": "gomoku-websocket-spike",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test connection.test.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.18.3"
+  }
+}
