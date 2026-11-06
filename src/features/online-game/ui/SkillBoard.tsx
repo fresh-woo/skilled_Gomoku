@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { Button } from '../../../design-system/Button'
 import { GameNotice } from '../../../design-system/GameControls'
 import { GomokuBoard } from '../../../design-system/GomokuBoard'
@@ -9,6 +9,7 @@ import { isFortified } from '../../../entities/game/model/augments'
 import { canTargetStone } from '../../../entities/game/model/skillGame'
 import type { SkillView } from '../../../entities/game/model/skillGameView'
 import type { SelectedStoneSkill } from './OnlineSkillHand'
+import { Countdown } from './Countdown'
 
 const snipeMessages = {
   destroyed: '저격으로 돌이 파괴됐어요.',
@@ -17,16 +18,9 @@ const snipeMessages = {
 }
 
 export function SnipeNotice({ position, deadline }: { position: Position; deadline: number }) {
-  const [now, setNow] = useState(() => performance.now())
-  useEffect(() => {
-    const timer = setInterval(() => setNow(performance.now()), 200)
-    return () => clearInterval(timer)
-  }, [])
-
-  const remaining = Math.max(0, Math.ceil((deadline - now) / 1_000))
   return <>
     <GameNotice>{boardCoordinate(position)} 돌이 저격 대상이에요. 방어자는 무효화하거나 건너뛸 수 있어요.</GameNotice>
-    <p role="timer">남은 시간 {remaining}초</p>
+    <Countdown label="방어 남은 시간" deadline={deadline} />
   </>
 }
 

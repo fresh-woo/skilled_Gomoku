@@ -150,6 +150,74 @@ async function chooseInitialFortification(ctx) {
   ctx.view = await ctx.a.next('snapshot', (m) => m.skills?.augment.pending === false)
 }
 
+test('skill turn clock pauses for defense, survives reconnect and auto-places once at the deadline', async (t) => {
+  let time = 100_000
+  const draws = [3, 1, 3]
+  const ctx = await setup(t, 'five-in-a-row', 'skills', {
+    clockNow: () => time, drawCard: () => draws.shift() ?? 3,
+  })
+  assert.deepEqual(ctx.view.turnClock, { deadline: null, remainingMs: 20_000 })
+  time += 30_000
+  await chooseInitialFortification(ctx)
+  const firstId = ctx.view.turn.activePlayerId
+  const first = firstId === 'black' ? ctx.a : ctx.b
+  const second = first === ctx.a ? ctx.b : ctx.a
+  const secondId = firstId === 'black' ? 'white' : 'black'
+  const secondToken = (second === ctx.a ? ctx.sessionA : ctx.sessionB).token
+  assert.deepEqual(ctx.view.turnClock, { deadline: time + 20_000 })
+
+  const firstMove = await command(first, ctx.view, { type: 'place-stone', position: { row: 0, column: 0 } })
+  const secondMove = await command(second, firstMove.view, { type: 'place-stone', position: { row: 2, column: 0 } })
+  const before = await first.next('snapshot', (m) => m.revision === secondMove.view.revision)
+  const disarm = before.skills.hands[firstId].find((card) => card.skill.kind === 'discard')
+  time += 7_000
+  const attack = await command(first, before, { type: 'use-skill', cardId: disarm.id })
+  assert.equal(attack.result.ok, true)
+  assert.deepEqual(attack.view.turnClock, { deadline: null, remainingMs: 13_000 })
+  const defense = await second.next('snapshot', (m) => m.revision === attack.view.revision)
+  const [nullify] = defense.skills.hands[secondId]
+  assert.equal(nullify.skill.kind, 'nullify')
+  assert.equal(defense.skills.cardBlocks[nullify.id], null)
+  await second.close()
+  time += 50_000
+
+  const resumed = await client(ctx.url)
+  resumed.send({ type: 'resume', token: secondToken })
+  await resumed.next('session')
+  const restored = await resumed.next('snapshot')
+  assert.deepEqual(restored.turnClock, defense.turnClock)
+  assert.deepEqual(restored.skills.hands[secondId], [nullify])
+  const pass = { type: 'respond', attackId: disarm.id }
+  const resolved = await command(resumed, restored, pass)
+  assert.equal(resolved.result.ok, true)
+  assert.deepEqual(resolved.view.turnClock, { deadline: time + 13_000 })
+  assert.deepEqual(resolved.view.skills.hands[secondId], [])
+  assert.equal(nullify.id in resolved.view.skills.cardBlocks, false)
+  assert.equal(resolved.view.turn.activePlayerId, firstId)
+  const restoredAgain = await client(ctx.url)
+  restoredAgain.send({ type: 'resume', token: secondToken })
+  await restoredAgain.next('session')
+  const restoredAfter = await restoredAgain.next('snapshot')
+  assert.deepEqual(restoredAfter.skills.hands[secondId], [])
+  assert.deepEqual(restoredAfter.turnClock, resolved.view.turnClock)
+  const replay = await command(restoredAgain, restored, pass, { requestId: resolved.requestId })
+  assert.deepEqual(replay.result, resolved.result)
+  assert.deepEqual(replay.view.turnClock, resolved.view.turnClock)
+
+  time = resolved.view.turnClock.deadline
+  const place = { type: 'place-stone', position: { row: 0, column: 1 } }
+  const late = await command(first, resolved.view, place)
+  assert.equal(late.result.code, 'STALE_REVISION')
+  assert.equal(late.view.revision, resolved.view.revision + 1)
+  assert.equal(late.view.turn.activePlayerId, secondId)
+  assert.deepEqual(late.view.turnClock, { deadline: time + 20_000 })
+  assert.equal(late.view.game.board.cells.flat().filter(Boolean).length, 3)
+  assert.equal(late.view.game.board.cells.flat().filter((stone) => stone?.ownerId === firstId).length, 2)
+  const duplicate = await command(first, resolved.view, place, { requestId: late.requestId })
+  assert.deepEqual(duplicate.result, late.result)
+  assert.deepEqual(duplicate.view.game, late.view.game)
+})
+
 test('online augment choices wait for both players and survive reconnect without regranting cards', async (t) => {
   const ctx = await setup(t, 'five-in-a-row', 'skills', { drawCard: () => 0 })
   const initial = ctx.view

@@ -5,6 +5,7 @@ import { Modal } from '../../design-system/Modal'
 import { OnlineSkillHand } from './ui/OnlineSkillHand'
 import type { SelectedStoneSkill } from './ui/OnlineSkillHand'
 import { SkillBoard, SnipeNotice, SnipeOutcome } from './ui/SkillBoard'
+import { Countdown } from './ui/Countdown'
 import { SkillCatalogButton } from '../skill-catalog/SkillCatalog'
 import { AUGMENTS } from '../../entities/game/model/augments'
 import { AugmentChoice } from './ui/AugmentChoice'
@@ -93,6 +94,7 @@ export function OnlineGame() {
             soundCursor.sync(message.gameId, message.revision)
           }
           setView({ ...message, receivedAt: performance.now() })
+          if (message.turn.phase !== 'my-turn') setTarget(null)
           setConnected(true)
           setStatus('연결됨')
           if (firstSnapshot && pending.current) current.send(JSON.stringify(pending.current))
@@ -201,6 +203,9 @@ export function OnlineGame() {
           </GameNotice>
           </div>
         )}
+        {view?.turnClock && <Countdown label="턴 남은 시간" {...(view.turnClock.deadline === null
+          ? view.turnClock
+          : { deadline: view.turnClock.deadline - view.serverTime + view.receivedAt })} />}
         {augment?.pending && error && <GameNotice tone="error" alert>{error}</GameNotice>}
         {game.status === 'playing' && Boolean(augment?.choices.length) && augment && (
           <AugmentChoice key={`${view?.gameId}-${game.turn.round}`} choices={augment.choices} disabled={!connected || busy}
