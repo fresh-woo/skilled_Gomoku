@@ -240,14 +240,14 @@ export function OnlineGame() {
         </fieldset>
       </div>}
     </div>}
-    {showResult && <Modal key={view.gameId} title={resultTitle || '대국 종료'}
+    {showResult && <Modal key={view.gameId} title={resultTitle || '대국 종료'} tone={resultTitle === '승리' ? 'victory' : undefined}
       onDismiss={() => setDismissedResult(view.gameId)} actions={<>
         <Button disabled={!connected || busy || rematchReady} onClick={() => act({ type: 'rematch' })}>재대결</Button>
         <Button variant="secondary" onClick={leave}>종료</Button>
       </>}>
       <GameNotice>{!connected ? '다시 연결하는 중이에요.'
         : rematchReady ? '상대가 재대결을 요청할 때까지 기다려 주세요.'
-        : '두 플레이어가 모두 재대결을 요청하면 새 대국이 시작돼요.'}</GameNotice>
+        : '두 사람 모두 재대결을 요청하면 새 대국이 시작돼요.'}</GameNotice>
       {error && <GameNotice tone="error" alert>{error}</GameNotice>}
     </Modal>}
   </section>

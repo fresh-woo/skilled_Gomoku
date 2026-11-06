@@ -2,8 +2,8 @@
   --font-sans: system-ui, sans-serif;
   --font-size-small: 0.875rem;
   --font-weight-strong: 700;
-  --color-text: #202523;
-  --color-muted: #506058;
+  --color-text: #19241e;
+  --color-muted: #3c5146;
   --color-background: #f5f7f5;
   --color-surface: #fff;
   --color-border: #d1dcd5;
@@ -40,6 +40,8 @@
   --color-error: #8b302b;
   --color-error-soft: #fce9e5;
   --color-scrim: rgb(20 34 27 / 62%);
+  --color-victory-surface: #14243a;
+  --color-victory-text: #ffdf91;
 
   font-family: var(--font-sans);
   color: var(--color-text);
@@ -49,8 +51,9 @@
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; }
+body { margin: 0; line-height: 1.55; }
 #root { min-height: 100vh; }
+a { color: var(--color-accent-pressed); text-underline-offset: .16em; }
 
 ::selection {
   color: var(--color-accent-pressed);
