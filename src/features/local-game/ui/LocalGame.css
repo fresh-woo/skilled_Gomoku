@@ -50,21 +50,8 @@
   white-space: nowrap;
   font-size: var(--font-size-small);
 }
-.local-game__hand-status, .local-game__hidden-hand p { color: var(--color-muted); font-size: var(--font-size-small); }
+.local-game__hand-status { color: var(--color-muted); font-size: var(--font-size-small); }
 .local-game__skills[data-active='true'] .local-game__hand-status { color: var(--color-accent-pressed); font-weight: var(--font-weight-strong); }
-.local-game__hidden-hand { display: flex; align-items: center; gap: var(--space-3); min-block-size: 3.5rem; }
-.local-game__card-back {
-  display: grid;
-  place-items: center;
-  flex: none;
-  inline-size: 2.5rem;
-  aspect-ratio: 5 / 7;
-  border: 1px solid var(--color-skill-black-edge);
-  border-radius: var(--space-1);
-  background: var(--color-skill-black);
-}
-.local-game__skills[data-side='white'] .local-game__card-back { background: var(--color-skill-white); border-color: var(--color-skill-white-edge); }
-.local-game__card-back .game-stone { outline: 1px solid var(--color-skill-black-edge); outline-offset: 2px; }
 .local-game__hand-header .game-stone { flex: none; }
 
 .local-game__table {
@@ -73,7 +60,7 @@
   max-inline-size: 42rem;
   margin-inline: auto;
 }
-.local-game__board { min-inline-size: 0; }
+.local-game__board { display: grid; align-content: start; gap: var(--space-3); min-inline-size: 0; }
 
 .local-game__hands {
   display: grid;

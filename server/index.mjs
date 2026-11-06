@@ -5,10 +5,9 @@ import { resolve, extname, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { WebSocketServer, WebSocket } from 'ws'
 import { applyCommand, startGame } from '../src/entities/game/model/game.ts'
-import { applySkillCommand, expireSnipe, startSkillGame, STONE_SKILL_COUNT } from '../src/entities/game/model/skillGame.ts'
-import { startTestSkillGame } from '../src/entities/game/model/testSkillScenario.ts'
+import { applySkillCommand, expireSnipe, ONLINE_SKILL_COUNT, startSkillGame } from '../src/entities/game/model/skillGame.ts'
 
-export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600_000, origins = [], drawCard = () => randomInt(STONE_SKILL_COUNT) } = {}) {
+export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600_000, origins = [], drawCard = () => randomInt(ONLINE_SKILL_COUNT) } = {}) {
   const rooms = new Map()
   const tokens = new Map()
   const root = fileURLToPath(new URL('../dist/', import.meta.url))
@@ -88,8 +87,7 @@ export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600
     const players = previous ? [...previous.players].reverse().map((p) => p.id)
       : (randomInt(2) ? ['black', 'white'] : ['white', 'black'])
     room.gameId = randomUUID()
-    if (room.rules === 'skills') room.skills = startTestSkillGame(room.mode, players, randomInt(0x100000000)).state
-    else if (room.rules === 'stone-skills') room.skills = startSkillGame(room.mode, players, null, 0, drawCard()).state
+    if (room.rules === 'skills') room.skills = startSkillGame(room.mode, players, null, randomInt(0x100000000), drawCard()).state
     else room.game = startGame(room.mode, players).state
     for (const m of room.members) { m.ready = false; m.results.clear() }
     room.revision++
@@ -126,7 +124,8 @@ export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600
           if (msg.type === 'create') {
             if (rooms.size >= 100) { fail('SERVER_FULL'); return }
             if (!['five-in-a-row', 'six-in-a-row'].includes(msg.mode) || !['basic', 'skills', 'stone-skills'].includes(msg.rules)) { fail('INVALID_SETTINGS'); return }
-            room = { id: randomUUID(), mode: msg.mode, rules: msg.rules, gameId: '', revision: 0, game: null, skills: null, members: [] }
+            const rules = msg.rules === 'stone-skills' ? 'skills' : msg.rules
+            room = { id: randomUUID(), mode: msg.mode, rules, gameId: '', revision: 0, game: null, skills: null, members: [] }
             rooms.set(room.id, room)
           } else room = typeof msg.roomId === 'string' ? rooms.get(msg.roomId) : null
           if (!room) { fail('ROOM_NOT_FOUND'); return }
@@ -183,7 +182,7 @@ export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600
         }
         if (!command || (!room.skills && command.type !== 'place-stone')) result.code = 'INVALID_ACTION'
         else {
-          const drawIndex = room.rules === 'stone-skills' && command.type === 'place-stone' ? drawCard() : undefined
+          const drawIndex = room.rules === 'skills' && command.type === 'place-stone' ? drawCard() : undefined
           const transition = room.skills ? applySkillCommand(room.skills, command, time, drawIndex) : applyCommand(room.game, command)
           if (!transition.ok) result.code = transition.reason
           else {

@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '../../design-system/Button'
 import { GameChoices, GameNotice } from '../../design-system/GameControls'
-import { LocalSkillHand } from '../local-game/ui/LocalSkillHand'
-import type { SelectedStoneSkill } from '../local-game/ui/LocalSkillHand'
-import { SkillBoard, SnipeNotice, SnipeOutcome } from '../local-game/ui/SkillBoard'
+import { OnlineSkillHand } from './ui/OnlineSkillHand'
+import type { SelectedStoneSkill } from './ui/OnlineSkillHand'
+import { SkillBoard, SnipeNotice, SnipeOutcome } from './ui/SkillBoard'
+import { SkillCatalogButton } from '../skill-catalog/SkillCatalog'
 import type { OnlineAction, Snapshot } from './protocol'
 
 const storageKey = 'gomoku-online-session-v1'
@@ -26,8 +27,7 @@ const errors: Record<string, string> = {
 }
 const onlineRules = [
   { id: 'basic', title: '기본 대국', description: '돌을 번갈아 놓아요.' },
-  { id: 'stone-skills', title: '스킬 대국', description: '저격, 무효화, 보호막을 사용해요.' },
-  { id: 'skills', title: '스킬 대국 · 테스트', description: '기존 테스트 카드 규칙' },
+  { id: 'skills', title: '스킬 대국', description: '착수 전에 카드를 쓰고 상대의 공격에 대응해요.' },
 ]
 function storedToken() { try { return sessionStorage.getItem(storageKey) } catch { return null } }
 function saveToken(token: string | null) {
@@ -116,7 +116,9 @@ export function OnlineGame() {
   const game = view?.game
   const response = view?.skills?.response
   const myTurn = game?.status === 'playing' && game.players[game.turn.activeSeat].id === view?.playerId
-  const canAct = connected && !busy && (response ? response.targetId === view?.playerId : myTurn)
+  const myDefense = Boolean(response && response.targetId === view?.playerId)
+  const canAct = connected && !busy && (response ? myDefense : myTurn)
+  const canDefend = myDefense && canAct
   const label = (id: string) => id === 'black' ? '흑돌' : '백돌'
 
   return <section className="local-game" id="online-game" aria-labelledby="online-title">
@@ -134,6 +136,7 @@ export function OnlineGame() {
           <Button type="submit" disabled={!code.trim()}>방 참가</Button>
         </form>
       </>}
+      <div className="local-game__actions"><SkillCatalogButton /></div>
       <GameNotice>{status}</GameNotice>
       {error && !view?.skills && <GameNotice tone="error" alert>{error}</GameNotice>}
       {view && <>
@@ -141,7 +144,6 @@ export function OnlineGame() {
         <p>나는 {label(view.playerId)} · {onlineRules.find(({ id }) => id === view.rules)?.title} · {view.mode === 'six-in-a-row' ? '6목' : '5목'}</p>
         <p>{view.members.map((m) => `${label(m.id)} ${m.connected ? '접속' : '재접속 대기'}${m.ready ? ' · 재대국 준비' : ''}`).join(' / ')}</p>
         {!game && <p>두 번째 플레이어가 참가하면 대국이 시작됩니다.</p>}
-        {game?.status === 'playing' && <GameNotice>{game.turn.round}라운드 · {response ? `${label(response.targetId)} 방어 응답 대기` : `${label(game.players[game.turn.activeSeat].id)} 차례`}</GameNotice>}
         {game?.status === 'finished' && <>
           <GameNotice>{game.result.kind === 'draw' ? '무승부' : `${label(game.result.winnerId)} 승리`}</GameNotice>
           <Button disabled={!connected || busy || view.members.find((m) => m.id === view.playerId)?.ready} onClick={() => act({ type: 'rematch' })}>재대국 준비</Button>
@@ -151,17 +153,33 @@ export function OnlineGame() {
     </div>
     {game && <div className="local-game__table" data-skills={Boolean(view?.skills)}>
       <div className="local-game__board">
+        {game.status === 'playing' && (
+          <GameNotice tone={canDefend ? 'warning' : 'info'}>
+            <strong>{myTurn ? '내 턴' : '상대 턴'}</strong> · {game.turn.round}라운드
+            <div>
+              {!connected ? '다시 연결하는 중이에요.'
+                : busy ? '행동을 처리하고 있어요.'
+                : canDefend ? <>방어 응답 가능 · <a href="#online-skill-hand">손패로 이동</a></>
+                : response ? '상대의 방어 응답을 기다려 주세요.'
+                : target ? '판에서 카드의 대상을 고르세요.'
+                : myTurn ? '판에서 돌을 놓을 수 있어요.'
+                : '상대의 착수를 기다려 주세요.'}
+            </div>
+          </GameNotice>
+        )}
         <SkillBoard game={game} skills={view?.skills} target={target} color={(id) => id === 'black' ? 'black' : 'white'} canAct={Boolean(canAct)}
           onSelect={(position) => act(target ? { type: 'use-skill', cardId: target.cardId, position } : { type: 'place-stone', position })}
           onCancel={() => setTarget(null)} />
       </div>
-      {view?.skills && <div className="local-game__hands">
+      {view?.skills && <div className="local-game__hands" id="online-skill-hand" tabIndex={-1}>
         {error && <GameNotice tone="error" alert>{error}</GameNotice>}
         {response?.phase === 'snipe' && <SnipeNotice position={response.position} deadline={response.deadline - view.serverTime + view.receivedAt} />}
+        {response?.phase === 'before' && <GameNotice>무장해제 적용 전에 방어할 수 있어요.</GameNotice>}
+        {response?.phase === 'after' && <GameNotice>무장해제로 버린 카드를 복구할 수 있어요.</GameNotice>}
         {view.skills.snipeOutcome && <SnipeOutcome outcome={view.skills.snipeOutcome} />}
         <p>상대 손패 {Object.entries(view.handCounts).find(([id]) => id !== view.playerId)?.[1] ?? 0}장</p>
         <fieldset disabled={!canAct}>
-          <LocalSkillHand state={view.skills} playerId={view.playerId} side={view.playerId === 'black' ? 'black' : 'white'} showWhenWaiting onTarget={setTarget} onAction={(action) => {
+          <OnlineSkillHand state={view.skills} playerId={view.playerId} side={view.playerId === 'black' ? 'black' : 'white'} onTarget={setTarget} onAction={(action) => {
             if (response) act({ type: 'respond', attackId: response.id, ...(action.type === 'card' ? { cardId: action.cardId, discardCardId: action.discardCardId } : {}) })
             else if (action.type === 'card') act({ type: 'use-skill', cardId: action.cardId })
           }} />
