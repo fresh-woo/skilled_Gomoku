@@ -6,6 +6,9 @@ import { WIN_LENGTH } from '../../../entities/game/model/game'
 import type { GameMode, GameState, PlayerId, Position } from '../../../entities/game/model/game'
 import { expireSnipe } from '../../../entities/game/model/skillGame'
 import type { SkillGame } from '../../../entities/game/model/skillGame'
+import { actionSounds } from '../../../entities/game/model/soundEvents'
+import type { GameSound } from '../../../entities/game/model/soundEvents'
+import { useGameSounds } from '../../game-sound/useGameSounds'
 import { applyLocalSkillAction, LOCAL_PLAYER_IDS, placeLocalStone, startLocalGame, startLocalSkillGame, startLocalStoneSkillGame } from '../model/localGame'
 import type { LocalSkillAction } from '../model/localGame'
 import { LocalSkillHand } from './LocalSkillHand'
@@ -25,9 +28,10 @@ const ruleOptions = [
   { id: 'skills', title: '스킬 대국 · 테스트', description: '카드를 받고 착수 전에 사용해요.' },
 ]
 
-type Match =
+type Match = (
   | { kind: 'basic'; game: GameState }
   | { kind: 'skills'; state: SkillGame; feedback?: { text: string; error?: boolean } }
+) & { sounds?: readonly GameSound[] }
 
 function stoneColor(playerId: PlayerId): StoneColor {
   return playerId === LOCAL_PLAYER_IDS[0] ? 'black' : 'white'
@@ -64,12 +68,15 @@ function skillFeedback(before: SkillGame, after: SkillGame, action: LocalSkillAc
 
 function playSkillAction(match: Extract<Match, { kind: 'skills' }>, action: LocalSkillAction, now: number): Match {
   const state = expireSnipe(match.state, now)
-  if (state !== match.state) return { ...match, state }
+  if (state !== match.state) return { ...match, state, sounds: [] }
   const result = applyLocalSkillAction(state, action, now)
   if (!result.ok) return { ...match, feedback: { text: '지금은 이 행동을 할 수 없어요. 차례와 카드 사용 조건을 확인하세요.', error: true } }
 
   const text = skillFeedback(match.state, result.state, action)
-  return { kind: 'skills', state: result.state, feedback: text ? { text } : undefined }
+  return {
+    kind: 'skills', state: result.state, feedback: text ? { text } : undefined,
+    sounds: actionSounds(action.type === 'card' ? 'skill' : action.type === 'place' ? 'place' : null),
+  }
 }
 
 export function LocalGame() {
@@ -80,14 +87,17 @@ export function LocalGame() {
   const skills = match?.kind === 'skills' ? match : undefined
   const game = skills?.state.game ?? (match?.kind === 'basic' ? match.game : null)
   const response = skills?.state.response
+  useGameSounds(match?.sounds)
 
   useEffect(() => {
     if (response?.phase !== 'snipe') return
     const timer = setTimeout(() => {
       const now = performance.now()
-      setMatch((current) => current?.kind === 'skills' && current.state.response === response
-        ? { ...current, state: expireSnipe(current.state, now) }
-        : current)
+      setMatch((current) => {
+        if (current?.kind !== 'skills' || current.state.response !== response) return current
+        const next = expireSnipe(current.state, now)
+        return next === current.state ? current : { ...current, state: next, sounds: [] }
+      })
     }, Math.max(0, response.deadline - performance.now()) + 1)
     return () => clearTimeout(timer)
   }, [response])
@@ -117,7 +127,7 @@ export function LocalGame() {
     setMatch((current) => {
       if (current?.kind !== 'basic') return current
       const transition = placeLocalStone(current.game, position)
-      return transition.ok ? { kind: 'basic', game: transition.state } : current
+      return transition.ok ? { kind: 'basic', game: transition.state, sounds: actionSounds('place') } : current
     })
   }
 

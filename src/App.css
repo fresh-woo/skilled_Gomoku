@@ -25,6 +25,18 @@
 
 .site-brand svg { flex: none; }
 
+.site-header__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+@media (max-width: 420px) {
+  .site-header__inner { flex-wrap: wrap; }
+  .site-header__actions { margin-inline-start: auto; }
+}
+
 .welcome {
   inline-size: min(100% - var(--space-8), 42rem);
   margin-inline: auto;
