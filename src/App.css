@@ -44,28 +44,3 @@
   color: var(--color-muted);
   line-height: 1.7;
 }
-
-.welcome__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
-.welcome__actions a { text-decoration: none; }
-
-.design-preview {
-  max-inline-size: 34rem;
-  margin-block-start: var(--space-6);
-  padding: var(--space-4) var(--space-6);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-surface);
-  background: var(--color-surface);
-}
-
-.design-preview h2 { margin: 0; font-size: 1rem; }
-.design-preview p {
-  margin: var(--space-2) 0 var(--space-4);
-  color: var(--color-muted);
-  font-size: var(--font-size-small);
-  line-height: 1.6;
-}

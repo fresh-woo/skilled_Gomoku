@@ -109,9 +109,11 @@ function PlayableSkillCards({ hand, side, phase, used, onAction, onTarget }: {
 
   return (
     <>
-      {hand.length > 0
-        ? <SkillCardPicker name={name} side={side} cards={options} selected={selected?.id ?? ''} onSelect={(id) => { setChoice(id); setCost('') }} />
-        : <p>손패에 카드가 없어요.</p>}
+      <div className="local-game__card-list">
+        {hand.length > 0
+          ? <SkillCardPicker name={name} side={side} cards={options} selected={selected?.id ?? ''} onSelect={(id) => { setChoice(id); setCost('') }} />
+          : <p>손패에 카드가 없어요.</p>}
+      </div>
       {choosingCost && <label>
         버릴 카드 1장 선택{' '}
         <select value={cost} onChange={(event) => setCost(event.target.value)}>
@@ -119,14 +121,12 @@ function PlayableSkillCards({ hand, side, phase, used, onAction, onTarget }: {
           {costCards.map((card) => <option key={card.id} value={card.id}>{cardOption(card, phase, artSrc).title}</option>)}
         </select>
       </label>}
-      {(selected || phase) && (
-        <div className="local-game__actions">
-          {selected && <Button disabled={choosingCost && !validCost} onClick={() => playSelectedCard(Number(selected.id))}>
-            {choosingCost ? '카드를 버리고 무효화' : onTarget && (selectedKind === 'snipe' || selectedKind === 'shield') ? '판에서 대상 선택' : '선택한 카드 사용'}
-          </Button>}
-          {phase && <Button variant="secondary" onClick={() => act({ type: 'pass' })}>방어하지 않기</Button>}
-        </div>
-      )}
+      <div className="local-game__actions">
+        <Button disabled={!selected || (choosingCost && !validCost)} onClick={() => { if (selected) playSelectedCard(Number(selected.id)) }}>
+          {choosingCost ? '카드를 버리고 무효화' : onTarget && (selectedKind === 'snipe' || selectedKind === 'shield') ? '판에서 대상 선택' : '선택한 카드 사용'}
+        </Button>
+        {phase && <Button variant="secondary" onClick={() => act({ type: 'pass' })}>방어하지 않기</Button>}
+      </div>
     </>
   )
 }
@@ -148,7 +148,7 @@ export function LocalSkillHand({ state, playerId, side, showWhenWaiting = false,
   const label = side === 'black' ? '흑돌' : '백돌'
 
   useEffect(() => {
-    if (attackId !== undefined) heading.current?.focus()
+    if (attackId !== undefined) heading.current?.focus({ preventScroll: true })
   }, [attackId])
 
   return (
@@ -163,7 +163,7 @@ export function LocalSkillHand({ state, playerId, side, showWhenWaiting = false,
       </p>
       {game.status === 'playing' && (active || showWhenWaiting) ? (
         <PlayableSkillCards key={active ? response?.id ?? 'turn' : 'waiting'} hand={hand} side={side} phase={active ? response?.phase : undefined} used={active ? state.usedStoneSkills : []} onTarget={onTarget}
-          onAction={(action) => { heading.current?.focus(); onAction(action) }} />
+          onAction={(action) => { heading.current?.focus({ preventScroll: true }); onAction(action) }} />
       ) : (
         <div className="local-game__hidden-hand">
           {hand.length > 0 && <span className="local-game__card-back" aria-hidden="true"><Stone color={side} /></span>}

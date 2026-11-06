@@ -138,24 +138,28 @@ export function LocalGame() {
           <SkillCatalogButton />
         </div>
         <GameNotice>
-          {skills && (skills.state.drawPile ? '스킬 테스트 · ' : '스킬 대국 · ')}{gameStatus(game)}
-          {response && ` · ${stoneLabel(response.targetId)} 방어 응답 대기`}
+          {skills && (skills.state.drawPile ? '스킬 테스트 · ' : '스킬 대국 · ')}
+          {response ? `${stoneLabel(response.targetId)} 방어 응답 대기` : gameStatus(game)}
         </GameNotice>
-        {response?.phase === 'snipe' && <SnipeNotice position={response.position} deadline={response.deadline} />}
-        {skills?.state.snipeOutcome && <SnipeOutcome outcome={skills.state.snipeOutcome} />}
-        {skills?.feedback && (
-          <GameNotice tone={skills.feedback.error ? 'error' : 'info'} alert={skills.feedback.error}>
-            {skills.feedback.text}
-          </GameNotice>
-        )}
       </div>
       {game && (
         <div className="local-game__table" data-skills={Boolean(skills)}>
-          {skills && <LocalSkillHand state={skills.state} playerId={LOCAL_PLAYER_IDS[0]} side="black" onAction={act} onTarget={setTarget} />}
           <div className="local-game__board">
             <SkillBoard game={game} skills={skills?.state} target={target} color={stoneColor} canAct onSelect={place} onCancel={() => setTarget(null)} />
           </div>
-          {skills && <LocalSkillHand state={skills.state} playerId={LOCAL_PLAYER_IDS[1]} side="white" onAction={act} onTarget={setTarget} />}
+          {skills && (
+            <div className="local-game__hands">
+              {response?.phase === 'snipe' && <SnipeNotice position={response.position} deadline={response.deadline} />}
+              {skills.state.snipeOutcome && <SnipeOutcome outcome={skills.state.snipeOutcome} />}
+              <LocalSkillHand state={skills.state} playerId={LOCAL_PLAYER_IDS[0]} side="black" onAction={act} onTarget={setTarget} />
+              <LocalSkillHand state={skills.state} playerId={LOCAL_PLAYER_IDS[1]} side="white" onAction={act} onTarget={setTarget} />
+              {skills.feedback && (
+                <GameNotice tone={skills.feedback.error ? 'error' : 'info'} alert={skills.feedback.error}>
+                  {skills.feedback.text}
+                </GameNotice>
+              )}
+            </div>
+          )}
         </div>
       )}
     </section>
