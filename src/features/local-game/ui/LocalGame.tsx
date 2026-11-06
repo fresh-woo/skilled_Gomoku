@@ -125,18 +125,12 @@ export function LocalGame() {
           <SkillCatalogButton />
         </div>
         <GameNotice>
-          {skills && '스킬 테스트 · '}{gameStatus(game)}
-          {response && ` · ${stoneLabel(response.targetId)} 방어 응답 대기`}
+          {skills && '스킬 테스트 · '}
+          {response ? `${stoneLabel(response.targetId)} 방어 응답 대기` : gameStatus(game)}
         </GameNotice>
-        {skills?.feedback && (
-          <GameNotice tone={skills.feedback.error ? 'error' : 'info'} alert={skills.feedback.error}>
-            {skills.feedback.text}
-          </GameNotice>
-        )}
       </div>
       {game && (
         <div className="local-game__table" data-skills={Boolean(skills)}>
-          {skills && <LocalSkillHand state={skills.state} playerId={LOCAL_PLAYER_IDS[0]} side="black" onAction={act} />}
           <div className="local-game__board">
             <GomokuBoard
               cells={boardCells(game.board)}
@@ -145,7 +139,17 @@ export function LocalGame() {
               onSelect={place}
             />
           </div>
-          {skills && <LocalSkillHand state={skills.state} playerId={LOCAL_PLAYER_IDS[1]} side="white" onAction={act} />}
+          {skills && (
+            <div className="local-game__hands">
+              <LocalSkillHand state={skills.state} playerId={LOCAL_PLAYER_IDS[0]} side="black" onAction={act} />
+              <LocalSkillHand state={skills.state} playerId={LOCAL_PLAYER_IDS[1]} side="white" onAction={act} />
+              {skills.feedback && (
+                <GameNotice tone={skills.feedback.error ? 'error' : 'info'} alert={skills.feedback.error}>
+                  {skills.feedback.text}
+                </GameNotice>
+              )}
+            </div>
+          )}
         </div>
       )}
     </section>

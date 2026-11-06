@@ -72,15 +72,15 @@ function PlayableSkillCards({ hand, side, phase, onAction }: {
 
   return (
     <>
-      {hand.length > 0
-        ? <SkillCardPicker name={name} side={side} cards={options} selected={selected?.id ?? ''} onSelect={setChoice} />
-        : <p>손패에 카드가 없어요.</p>}
-      {(selected || phase) && (
-        <div className="local-game__actions">
-          {selected && <Button onClick={() => act({ type: 'card', cardId: Number(selected.id) })}>선택한 카드 사용</Button>}
-          {phase && <Button variant="secondary" onClick={() => act({ type: 'pass' })}>방어하지 않기</Button>}
-        </div>
-      )}
+      <div className="local-game__card-list">
+        {hand.length > 0
+          ? <SkillCardPicker name={name} side={side} cards={options} selected={selected?.id ?? ''} onSelect={setChoice} />
+          : <p>손패에 카드가 없어요.</p>}
+      </div>
+      <div className="local-game__actions">
+        <Button disabled={!selected} onClick={() => { if (selected) act({ type: 'card', cardId: Number(selected.id) }) }}>선택한 카드 사용</Button>
+        {phase && <Button variant="secondary" onClick={() => act({ type: 'pass' })}>방어하지 않기</Button>}
+      </div>
     </>
   )
 }
@@ -101,7 +101,7 @@ export function LocalSkillHand({ state, playerId, side, showWhenWaiting = false,
   const label = side === 'black' ? '흑돌' : '백돌'
 
   useEffect(() => {
-    if (attackId !== undefined) heading.current?.focus()
+    if (attackId !== undefined) heading.current?.focus({ preventScroll: true })
   }, [attackId])
 
   return (
@@ -116,7 +116,7 @@ export function LocalSkillHand({ state, playerId, side, showWhenWaiting = false,
       </p>
       {game.status === 'playing' && (active || showWhenWaiting) ? (
         <PlayableSkillCards key={active ? response?.phase ?? 'turn' : 'waiting'} hand={hand} side={side} phase={active ? response?.phase : undefined}
-          onAction={(action) => { heading.current?.focus(); onAction(action) }} />
+          onAction={(action) => { heading.current?.focus({ preventScroll: true }); onAction(action) }} />
       ) : (
         <div className="local-game__hidden-hand">
           {hand.length > 0 && <span className="local-game__card-back" aria-hidden="true"><Stone color={side} /></span>}

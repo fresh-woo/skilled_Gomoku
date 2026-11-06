@@ -112,44 +112,51 @@ export function OnlineGame() {
   const label = (id: string) => id === 'black' ? '흑돌' : '백돌'
 
   return <section className="local-game" id="online-game" aria-labelledby="online-title">
-    <h2 id="online-title">온라인 2인 대국</h2>
-    <p>같은 방 코드로 참가하면 두 사람이 각자의 화면에서 플레이해요.</p>
-    {!entry && !view && <>
-      <GameChoices name="online-mode" legend="온라인 승리 모드" value={mode} onChange={setMode} options={[
-        { id: 'five-in-a-row', title: '5목', description: '정확히 5개' }, { id: 'six-in-a-row', title: '6목', description: '정확히 6개' },
-      ]} />
-      <GameChoices name="online-rules" legend="온라인 대국 규칙" value={rules} onChange={setRules} options={[
-        { id: 'basic', title: '기본 대국', description: '돌을 번갈아 놓아요.' }, { id: 'skills', title: '스킬 대국 · 테스트', description: '기존 테스트 카드 규칙' },
-      ]} />
-      <Button onClick={() => { setError(''); setEntry({ type: 'create', mode, rules }) }}>온라인 방 만들기</Button>
-      <form onSubmit={(e) => { e.preventDefault(); setError(''); setEntry({ type: 'join', roomId: code.trim() }) }}>
-        <label>방 코드 <input value={code} onChange={(e) => setCode(e.target.value)} required maxLength={80} /></label>
-        <Button type="submit" disabled={!code.trim()}>방 참가</Button>
-      </form>
-    </>}
-    <GameNotice>{status}</GameNotice>
-    {error && <GameNotice tone="error" alert>{error}</GameNotice>}
-    {view && <>
-      <p>방 코드: <strong style={{ overflowWrap: 'anywhere' }}>{view.roomId}</strong></p>
-      <p>나는 {label(view.playerId)} · {view.rules === 'skills' ? '스킬 테스트' : '기본 대국'} · {view.mode === 'six-in-a-row' ? '6목' : '5목'}</p>
-      <p>{view.members.map((m) => `${label(m.id)} ${m.connected ? '접속' : '재접속 대기'}${m.ready ? ' · 재대국 준비' : ''}`).join(' / ')}</p>
-      {!game && <p>두 번째 플레이어가 참가하면 대국이 시작됩니다.</p>}
-      {game?.status === 'playing' && <GameNotice>{game.turn.round}라운드 · {response ? `${label(response.targetId)} 방어 응답 대기` : `${label(game.players[game.turn.activeSeat].id)} 차례`}</GameNotice>}
-      {game?.status === 'finished' && <>
-        <GameNotice>{game.result.kind === 'draw' ? '무승부' : `${label(game.result.winnerId)} 승리`}</GameNotice>
-        <Button disabled={!connected || busy || view.members.find((m) => m.id === view.playerId)?.ready} onClick={() => act({ type: 'rematch' })}>재대국 준비</Button>
+    <div className="local-game__setup">
+      <h2 id="online-title">온라인 2인 대국</h2>
+      <p>같은 방 코드로 참가하면 두 사람이 각자의 화면에서 플레이해요.</p>
+      {!entry && !view && <>
+        <GameChoices name="online-mode" legend="온라인 승리 모드" value={mode} onChange={setMode} options={[
+          { id: 'five-in-a-row', title: '5목', description: '정확히 5개' }, { id: 'six-in-a-row', title: '6목', description: '정확히 6개' },
+        ]} />
+        <GameChoices name="online-rules" legend="온라인 대국 규칙" value={rules} onChange={setRules} options={[
+          { id: 'basic', title: '기본 대국', description: '돌을 번갈아 놓아요.' }, { id: 'skills', title: '스킬 대국 · 테스트', description: '기존 테스트 카드 규칙' },
+        ]} />
+        <Button onClick={() => { setError(''); setEntry({ type: 'create', mode, rules }) }}>온라인 방 만들기</Button>
+        <form onSubmit={(e) => { e.preventDefault(); setError(''); setEntry({ type: 'join', roomId: code.trim() }) }}>
+          <label>방 코드 <input value={code} onChange={(e) => setCode(e.target.value)} required maxLength={80} /></label>
+          <Button type="submit" disabled={!code.trim()}>방 참가</Button>
+        </form>
       </>}
-      {view.skills && <>
+      <GameNotice>{status}</GameNotice>
+      {error && !view?.skills && <GameNotice tone="error" alert>{error}</GameNotice>}
+      {view && <>
+        <p>방 코드: <strong style={{ overflowWrap: 'anywhere' }}>{view.roomId}</strong></p>
+        <p>나는 {label(view.playerId)} · {view.rules === 'skills' ? '스킬 테스트' : '기본 대국'} · {view.mode === 'six-in-a-row' ? '6목' : '5목'}</p>
+        <p>{view.members.map((m) => `${label(m.id)} ${m.connected ? '접속' : '재접속 대기'}${m.ready ? ' · 재대국 준비' : ''}`).join(' / ')}</p>
+        {!game && <p>두 번째 플레이어가 참가하면 대국이 시작됩니다.</p>}
+        {game?.status === 'playing' && <GameNotice>{game.turn.round}라운드 · {response ? `${label(response.targetId)} 방어 응답 대기` : `${label(game.players[game.turn.activeSeat].id)} 차례`}</GameNotice>}
+        {game?.status === 'finished' && <>
+          <GameNotice>{game.result.kind === 'draw' ? '무승부' : `${label(game.result.winnerId)} 승리`}</GameNotice>
+          <Button disabled={!connected || busy || view.members.find((m) => m.id === view.playerId)?.ready} onClick={() => act({ type: 'rematch' })}>재대국 준비</Button>
+        </>}
+      </>}
+      {entry && <Button variant="secondary" onClick={leave}>방 나가기 · 대국 종료</Button>}
+    </div>
+    {game && <div className="local-game__table" data-skills={Boolean(view?.skills)}>
+      <div className="local-game__board">
+        <GomokuBoard cells={cells} size={game.board.size} isSelectable={({ row, column }) => !!canAct && !response && game.status === 'playing' && !game.board.cells[row][column]} onSelect={(position) => act({ type: 'place-stone', position })} />
+      </div>
+      {view?.skills && <div className="local-game__hands">
+        {error && <GameNotice tone="error" alert>{error}</GameNotice>}
         <p>상대 손패 {Object.entries(view.handCounts).find(([id]) => id !== view.playerId)?.[1] ?? 0}장</p>
-        <fieldset disabled={!canAct} style={{ border: 0, padding: 0 }}>
+        <fieldset disabled={!canAct}>
           <LocalSkillHand state={view.skills} playerId={view.playerId} side={view.playerId === 'black' ? 'black' : 'white'} showWhenWaiting onAction={(action) => {
             if (response) act({ type: 'respond', attackId: response.id, ...(action.type === 'card' ? { cardId: action.cardId } : {}) })
             else if (action.type === 'card') act({ type: 'use-skill', cardId: action.cardId })
           }} />
         </fieldset>
-      </>}
-      {game && <GomokuBoard cells={cells} size={game.board.size} isSelectable={({ row, column }) => !!canAct && !response && game.status === 'playing' && !game.board.cells[row][column]} onSelect={(position) => act({ type: 'place-stone', position })} />}
-    </>}
-    {entry && <Button variant="secondary" onClick={leave}>방 나가기 · 대국 종료</Button>}
+      </div>}
+    </div>}
   </section>
 }
