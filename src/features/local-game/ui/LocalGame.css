@@ -1,0 +1,25 @@
+.local-game {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+  margin-block: var(--space-8);
+}
+
+.local-game h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.local-game > .button {
+  justify-self: start;
+}
+
+.local-game .game-choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.local-game .game-choice {
+  margin-block-start: 0;
+}
