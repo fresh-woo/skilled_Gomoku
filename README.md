@@ -24,6 +24,10 @@ npm run preview    # 빌드 결과 확인 (먼저 build 실행)
 가벼운 FSD 구조를 지향하며 실제 필요에 따라 `pages`, `widgets`, `features`, `entities`, `shared`를 추가합니다. 공통 디자인 토큰과 컴포넌트는 `src/design-system`에서 관리합니다. 게임 규칙, 화면, 네트워크 코드는 분리합니다.
 
 - [AGENTS.md](AGENTS.md): 채팅 간 공통 작업 원칙
+- [게임 기획](docs/game-spec.md): 게임 방향과 미확정 사항
+- [개발 로드맵](docs/development-roadmap.md): 단계별 개발 순서와 개발 채팅 전달 내용
+- [온라인 협업 가이드](docs/online-collaboration.md): 동료와의 역할, WebSocket 검토 및 통합 순서
+- [디자인 시스템](docs/design-system.md): 디자인·개발 작업 경계와 UI 기준
 - [작업 기록](docs/work-log.md): 현재 상태, 검증 및 다음 작업
 - [설계 결정](docs/decisions.md): 주요 결정과 미확정 사항
 
