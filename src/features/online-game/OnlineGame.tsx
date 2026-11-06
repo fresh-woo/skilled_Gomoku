@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '../../design-system/Button'
 import { GameChoices, GameNotice } from '../../design-system/GameControls'
-import { GomokuBoard } from '../../design-system/GomokuBoard'
-import { boardCoordinate } from '../../design-system/board-model'
-import type { BoardCell } from '../../design-system/board-model'
 import { LocalSkillHand } from '../local-game/ui/LocalSkillHand'
+import type { SelectedStoneSkill } from '../local-game/ui/LocalSkillHand'
+import { SkillBoard, SnipeNotice, SnipeOutcome } from '../local-game/ui/SkillBoard'
 import type { OnlineAction, Snapshot } from './protocol'
 
 const storageKey = 'gomoku-online-session-v1'
@@ -19,7 +18,17 @@ const errors: Record<string, string> = {
   SERVER_FULL: '서버가 혼잡해요. 잠시 후 다시 시도하세요.',
   'not-active-player': '지금은 상대 차례예요.',
   'response-pending': '방어 응답이 끝날 때까지 기다려 주세요.',
+  'response-expired': '방어 응답 시간이 지났어요.',
+  'invalid-nullify-cost': '무효화와 함께 버릴 다른 카드 1장을 골라 주세요.',
+  'invalid-target': '이 카드의 대상이 될 수 없는 돌이에요.',
+  'already-shielded': '이미 보호막이 있는 돌이에요.',
+  'skill-used-this-turn': '이번 턴에 이미 사용한 카드 종류예요.',
 }
+const onlineRules = [
+  { id: 'basic', title: '기본 대국', description: '돌을 번갈아 놓아요.' },
+  { id: 'stone-skills', title: '스킬 대국', description: '저격, 무효화, 보호막을 사용해요.' },
+  { id: 'skills', title: '스킬 대국 · 테스트', description: '기존 테스트 카드 규칙' },
+]
 function storedToken() { try { return sessionStorage.getItem(storageKey) } catch { return null } }
 function saveToken(token: string | null) {
   try { if (token) sessionStorage.setItem(storageKey, token); else sessionStorage.removeItem(storageKey) } catch { /* Memory reconnection still works. */ }
@@ -32,7 +41,7 @@ export function OnlineGame() {
     const token = storedToken()
     return token ? { type: 'resume', token } : null
   })
-  const [view, setView] = useState<Snapshot | null>(null)
+  const [view, setView] = useState<(Snapshot & { receivedAt: number }) | null>(null)
   const [status, setStatus] = useState('방을 만들거나 공유받은 코드로 참가하세요.')
   const [connected, setConnected] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -40,6 +49,7 @@ export function OnlineGame() {
   const [mode, setMode] = useState('five-in-a-row')
   const [rules, setRules] = useState('basic')
   const [code, setCode] = useState('')
+  const [target, setTarget] = useState<SelectedStoneSkill | null>(null)
   const socket = useRef<WebSocket | null>(null)
   const pending = useRef<Pending | null>(null)
 
@@ -60,7 +70,7 @@ export function OnlineGame() {
         const message = JSON.parse(data)
         if (message.type === 'session') { token = message.token; saveToken(token); attempts = 0 }
         if (message.type === 'snapshot') {
-          setView(message)
+          setView({ ...message, receivedAt: performance.now() })
           setConnected(true)
           setStatus('연결됨')
           if (pending.current) current.send(JSON.stringify(pending.current))
@@ -93,22 +103,20 @@ export function OnlineGame() {
   function act(action: Pending['action']) {
     if (!view || !connected || pending.current || socket.current?.readyState !== WebSocket.OPEN) return
     const message: Pending = { v: 1, type: 'command', requestId: requestId(), gameId: view.gameId, revision: view.revision, action }
+    setTarget(null)
     pending.current = message; setBusy(true); setError('')
     socket.current.send(JSON.stringify(message))
   }
   function leave() {
     if (connected) socket.current?.send(JSON.stringify({ v: 1, type: 'leave', requestId: requestId() }))
     setEntry(null); setView(null); setConnected(false); saveToken(null); pending.current = null; setBusy(false)
+    setTarget(null)
     setStatus('방을 만들거나 공유받은 코드로 참가하세요.')
   }
   const game = view?.game
   const response = view?.skills?.response
   const myTurn = game?.status === 'playing' && game.players[game.turn.activeSeat].id === view?.playerId
   const canAct = connected && !busy && (response ? response.targetId === view?.playerId : myTurn)
-  const cells: Partial<Record<string, BoardCell>> = {}
-  game?.board.cells.forEach((line, row) => line.forEach((stone, column) => {
-    if (stone) cells[boardCoordinate({ row, column })] = { stone: stone.ownerId === 'black' ? 'black' : 'white' }
-  }))
   const label = (id: string) => id === 'black' ? '흑돌' : '백돌'
 
   return <section className="local-game" id="online-game" aria-labelledby="online-title">
@@ -119,9 +127,7 @@ export function OnlineGame() {
         <GameChoices name="online-mode" legend="온라인 승리 모드" value={mode} onChange={setMode} options={[
           { id: 'five-in-a-row', title: '5목', description: '정확히 5개' }, { id: 'six-in-a-row', title: '6목', description: '정확히 6개' },
         ]} />
-        <GameChoices name="online-rules" legend="온라인 대국 규칙" value={rules} onChange={setRules} options={[
-          { id: 'basic', title: '기본 대국', description: '돌을 번갈아 놓아요.' }, { id: 'skills', title: '스킬 대국 · 테스트', description: '기존 테스트 카드 규칙' },
-        ]} />
+        <GameChoices name="online-rules" legend="온라인 대국 규칙" value={rules} onChange={setRules} options={onlineRules} />
         <Button onClick={() => { setError(''); setEntry({ type: 'create', mode, rules }) }}>온라인 방 만들기</Button>
         <form onSubmit={(e) => { e.preventDefault(); setError(''); setEntry({ type: 'join', roomId: code.trim() }) }}>
           <label>방 코드 <input value={code} onChange={(e) => setCode(e.target.value)} required maxLength={80} /></label>
@@ -132,7 +138,7 @@ export function OnlineGame() {
       {error && !view?.skills && <GameNotice tone="error" alert>{error}</GameNotice>}
       {view && <>
         <p>방 코드: <strong style={{ overflowWrap: 'anywhere' }}>{view.roomId}</strong></p>
-        <p>나는 {label(view.playerId)} · {view.rules === 'skills' ? '스킬 테스트' : '기본 대국'} · {view.mode === 'six-in-a-row' ? '6목' : '5목'}</p>
+        <p>나는 {label(view.playerId)} · {onlineRules.find(({ id }) => id === view.rules)?.title} · {view.mode === 'six-in-a-row' ? '6목' : '5목'}</p>
         <p>{view.members.map((m) => `${label(m.id)} ${m.connected ? '접속' : '재접속 대기'}${m.ready ? ' · 재대국 준비' : ''}`).join(' / ')}</p>
         {!game && <p>두 번째 플레이어가 참가하면 대국이 시작됩니다.</p>}
         {game?.status === 'playing' && <GameNotice>{game.turn.round}라운드 · {response ? `${label(response.targetId)} 방어 응답 대기` : `${label(game.players[game.turn.activeSeat].id)} 차례`}</GameNotice>}
@@ -145,14 +151,18 @@ export function OnlineGame() {
     </div>
     {game && <div className="local-game__table" data-skills={Boolean(view?.skills)}>
       <div className="local-game__board">
-        <GomokuBoard cells={cells} size={game.board.size} isSelectable={({ row, column }) => !!canAct && !response && game.status === 'playing' && !game.board.cells[row][column]} onSelect={(position) => act({ type: 'place-stone', position })} />
+        <SkillBoard game={game} skills={view?.skills} target={target} color={(id) => id === 'black' ? 'black' : 'white'} canAct={Boolean(canAct)}
+          onSelect={(position) => act(target ? { type: 'use-skill', cardId: target.cardId, position } : { type: 'place-stone', position })}
+          onCancel={() => setTarget(null)} />
       </div>
       {view?.skills && <div className="local-game__hands">
         {error && <GameNotice tone="error" alert>{error}</GameNotice>}
+        {response?.phase === 'snipe' && <SnipeNotice position={response.position} deadline={response.deadline - view.serverTime + view.receivedAt} />}
+        {view.skills.snipeOutcome && <SnipeOutcome outcome={view.skills.snipeOutcome} />}
         <p>상대 손패 {Object.entries(view.handCounts).find(([id]) => id !== view.playerId)?.[1] ?? 0}장</p>
         <fieldset disabled={!canAct}>
-          <LocalSkillHand state={view.skills} playerId={view.playerId} side={view.playerId === 'black' ? 'black' : 'white'} showWhenWaiting onAction={(action) => {
-            if (response) act({ type: 'respond', attackId: response.id, ...(action.type === 'card' ? { cardId: action.cardId } : {}) })
+          <LocalSkillHand state={view.skills} playerId={view.playerId} side={view.playerId === 'black' ? 'black' : 'white'} showWhenWaiting onTarget={setTarget} onAction={(action) => {
+            if (response) act({ type: 'respond', attackId: response.id, ...(action.type === 'card' ? { cardId: action.cardId, discardCardId: action.discardCardId } : {}) })
             else if (action.type === 'card') act({ type: 'use-skill', cardId: action.cardId })
           }} />
         </fieldset>

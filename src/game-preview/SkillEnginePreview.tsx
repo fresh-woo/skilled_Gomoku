@@ -7,7 +7,7 @@ import type { SkillGame } from '../entities/game/model/skillGame'
 import { attacker, createSkillDemo, defender, followUpMove } from './skill-engine-demo'
 
 type Command = Parameters<typeof applySkillCommand>[1]
-const cardNames: Record<SkillGame['drawPile'][number]['kind'], string> = {
+const cardNames: Partial<Record<SkillGame['hands'][string][number]['skill']['kind'], string>> = {
   discard: '버리기',
   cancel: '무효화',
   recover: '복구',

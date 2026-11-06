@@ -95,6 +95,19 @@ export function startGame(
 
 const directions = [[0, 1], [1, 0], [1, 1], [1, -1]] as const
 
+export function isBoardPosition({ size }: Board, { row, column }: Position): boolean {
+  return Number.isInteger(row) && Number.isInteger(column) &&
+    row >= 0 && row < size && column >= 0 && column < size
+}
+
+function withStone(board: Board, { row, column }: Position, stone: Stone | null): Board {
+  const cells = [...board.cells]
+  const updatedRow = [...cells[row]]
+  updatedRow[column] = stone
+  cells[row] = updatedRow
+  return { ...board, cells }
+}
+
 function countStones(
   board: Board,
   position: Position,
@@ -121,6 +134,23 @@ function hasWinningLine(board: Board, position: Position, player: Player): boole
   })
 }
 
+export function destroyStone(state: PlayingGame, position: Position): GameState {
+  if (!isBoardPosition(state.board, position)) return state
+  const ownerId = state.board.cells[position.row][position.column]?.ownerId
+  const player = state.players.find(({ id }) => id === ownerId)
+  if (!player) return state
+
+  const board = withStone(state.board, position, null)
+  const wins = directions.some(([rowStep, columnStep]) =>
+    countStones(board, position, player.id, rowStep, columnStep) === player.winCondition.lineLength ||
+    countStones(board, position, player.id, -rowStep, -columnStep) === player.winCondition.lineLength,
+  )
+  if (!wins) return { ...state, board }
+
+  const { mode, players } = state
+  return { mode, players, board, status: 'finished', result: { kind: 'win', winnerId: player.id } }
+}
+
 export function applyCommand(
   state: GameState,
   command: GameCommand,
@@ -132,19 +162,13 @@ export function applyCommand(
   if (command.actorId !== player.id) return { ok: false, reason: 'not-active-player' }
 
   const { row, column } = command.position
-  const { size } = state.board
-  if (!Number.isInteger(row) || !Number.isInteger(column) ||
-    row < 0 || row >= size || column < 0 || column >= size) {
+  if (!isBoardPosition(state.board, command.position)) {
     return { ok: false, reason: 'invalid-position' }
   }
 
   if (state.board.cells[row][column] !== null) return { ok: false, reason: 'occupied-position' }
 
-  const cells = [...state.board.cells]
-  const updatedRow = [...cells[row]]
-  updatedRow[column] = { ownerId: player.id }
-  cells[row] = updatedRow
-  const board = { size, cells }
+  const board = withStone(state.board, command.position, { ownerId: player.id })
   const game = { mode, players, board }
 
   if (hasWinningLine(board, command.position, player)) {
@@ -152,7 +176,7 @@ export function applyCommand(
     return { ok: true, state: { ...game, status: 'finished', result }, events: [] }
   }
 
-  if (cells.every((line) => line.every((stone) => stone !== null))) {
+  if (board.cells.every((line) => line.every((stone) => stone !== null))) {
     const result: GameResult = { kind: 'draw' }
     return { ok: true, state: { ...game, status: 'finished', result }, events: [] }
   }
