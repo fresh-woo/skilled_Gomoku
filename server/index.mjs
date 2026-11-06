@@ -44,10 +44,11 @@ export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600
   }
   function snapshot(room, member) {
     const skill = room.skills
-    const skills = skill ? projectSkillGame(skill, member.id) : null
+    const serverTime = Date.now()
+    const skills = skill ? projectSkillGame(skill, member.id, serverTime) : null
     const game = skills?.game ?? room.game
     return {
-      type: 'snapshot', roomId: room.id, gameId: room.gameId, revision: room.revision, serverTime: Date.now(),
+      type: 'snapshot', roomId: room.id, gameId: room.gameId, revision: room.revision, serverTime,
       playerId: member.id, mode: room.mode, rules: room.rules,
       members: room.members.map((m) => ({ id: m.id, connected: !!m.ws, ready: m.ready })),
       game, turn: projectOnlineTurn(game, skills, member.id),

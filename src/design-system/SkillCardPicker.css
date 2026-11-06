@@ -50,6 +50,7 @@
 }
 
 .play-skill-card:has(input:enabled) { cursor: pointer; }
+.play-skill-card[data-card-state='available'] { border-color: var(--skill-card-accent); }
 .play-skill-card:has(input:checked) { box-shadow: inset 0 0 0 2px var(--skill-card-accent); }
 .play-skill-card:has(input:focus-visible) { outline: 2px solid var(--color-focus); outline-offset: 2px; }
 

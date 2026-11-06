@@ -69,6 +69,9 @@ test('online snipe keeps a private, idempotent defense across reconnect and reso
   assert.equal(restored.skills.hands[first], undefined)
   const [nullify, cost] = restored.skills.hands[second]
   assert.deepEqual([nullify.skill.kind, cost.skill.kind], ['nullify', 'shield'])
+  assert.equal(restored.skills.cardBlocks[nullify.id], null)
+  assert.equal(restored.skills.cardBlocks[cost.id], 'invalid-skill-timing')
+  assert.deepEqual(Object.keys(restored.skills.cardBlocks), [String(nullify.id), String(cost.id)])
 
   const response = { type: 'respond', attackId: pending.id, cardId: nullify.id }
   const missing = await command(resumed, restored, response)

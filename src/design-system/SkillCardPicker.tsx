@@ -47,7 +47,7 @@ export function SkillCardFace({ card, side, id, control }: {
       )}
       <span className="play-skill-card__copy" id={id && `${id}-description`}>
         <span>{card.description}</span>
-        {card.unavailable && <small>{card.unavailable}</small>}
+        {(card.unavailable || control) && <small>{card.unavailable ?? '사용 가능'}</small>}
       </span>
     </>
   )
@@ -68,7 +68,7 @@ export function SkillCardPicker({ name, side, cards, selected, onSelect }: {
           const id = `${name}-${card.id}`
 
           return (
-            <label className="play-skill-card" key={card.id}>
+            <label className="play-skill-card" key={card.id} data-card-state={card.unavailable ? 'unavailable' : 'available'}>
               <SkillCardFace card={card} side={side} id={id} control={
                 <input
                   type="radio"
