@@ -1,15 +1,16 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '../../../design-system/Button'
 import { GameChoices, GameNotice } from '../../../design-system/GameControls'
-import { GomokuBoard } from '../../../design-system/GomokuBoard'
-import { boardCoordinate } from '../../../design-system/board-model'
-import type { BoardCell, StoneColor } from '../../../design-system/board-model'
+import type { StoneColor } from '../../../design-system/board-model'
 import { WIN_LENGTH } from '../../../entities/game/model/game'
-import type { Board, GameMode, GameState, PlayerId, Position } from '../../../entities/game/model/game'
+import type { GameMode, GameState, PlayerId, Position } from '../../../entities/game/model/game'
+import { expireSnipe } from '../../../entities/game/model/skillGame'
 import type { SkillGame } from '../../../entities/game/model/skillGame'
-import { applyLocalSkillAction, LOCAL_PLAYER_IDS, placeLocalStone, startLocalGame, startLocalSkillGame } from '../model/localGame'
+import { applyLocalSkillAction, LOCAL_PLAYER_IDS, placeLocalStone, startLocalGame, startLocalSkillGame, startLocalStoneSkillGame } from '../model/localGame'
 import type { LocalSkillAction } from '../model/localGame'
 import { LocalSkillHand } from './LocalSkillHand'
+import type { SelectedStoneSkill } from './LocalSkillHand'
+import { SkillBoard, SnipeNotice, SnipeOutcome } from './SkillBoard'
 import { SkillCatalogButton } from '../../skill-catalog/SkillCatalog'
 import './LocalGame.css'
 
@@ -20,6 +21,7 @@ const modeOptions = (Object.keys(WIN_LENGTH) as GameMode[]).map((mode) => ({
 }))
 const ruleOptions = [
   { id: 'basic', title: '기본 대국', description: '돌을 번갈아 놓아요.' },
+  { id: 'stone-skills', title: '스킬 대국', description: '저격, 무효화, 보호막을 사용해요.' },
   { id: 'skills', title: '스킬 대국 · 테스트', description: '카드를 받고 착수 전에 사용해요.' },
 ]
 
@@ -35,16 +37,6 @@ function stoneLabel(playerId: PlayerId) {
   return stoneColor(playerId) === 'black' ? '흑돌' : '백돌'
 }
 
-function boardCells(board: Board) {
-  const cells: Partial<Record<string, BoardCell>> = {}
-  board.cells.forEach((line, row) => {
-    line.forEach((stone, column) => {
-      if (stone) cells[boardCoordinate({ row, column })] = { stone: stoneColor(stone.ownerId) }
-    })
-  })
-  return cells
-}
-
 function gameStatus(game: GameState | null) {
   if (!game) return '모드를 선택하고 대국을 시작하세요.'
   const mode = `${WIN_LENGTH[game.mode]}목 모드`
@@ -58,6 +50,7 @@ function gameStatus(game: GameState | null) {
 
 function skillFeedback(before: SkillGame, after: SkillGame, action: LocalSkillAction) {
   if (action.type === 'place') return undefined
+  if (!before.drawPile) return undefined
   if (before.response) {
     const { targetId, phase } = before.response
     if (action.type === 'card') return phase === 'before' ? '공격을 막았어요.' : '버린 카드를 복구했어요.'
@@ -69,8 +62,10 @@ function skillFeedback(before: SkillGame, after: SkillGame, action: LocalSkillAc
   return undefined
 }
 
-function playSkillAction(match: Extract<Match, { kind: 'skills' }>, action: LocalSkillAction): Match {
-  const result = applyLocalSkillAction(match.state, action)
+function playSkillAction(match: Extract<Match, { kind: 'skills' }>, action: LocalSkillAction, now: number): Match {
+  const state = expireSnipe(match.state, now)
+  if (state !== match.state) return { ...match, state }
+  const result = applyLocalSkillAction(state, action, now)
   if (!result.ok) return { ...match, feedback: { text: '지금은 이 행동을 할 수 없어요. 차례와 카드 사용 조건을 확인하세요.', error: true } }
 
   const text = skillFeedback(match.state, result.state, action)
@@ -81,13 +76,26 @@ export function LocalGame() {
   const [mode, setMode] = useState<GameMode>('five-in-a-row')
   const [rules, setRules] = useState('basic')
   const [match, setMatch] = useState<Match | null>(null)
+  const [target, setTarget] = useState<SelectedStoneSkill | null>(null)
   const skills = match?.kind === 'skills' ? match : undefined
   const game = skills?.state.game ?? (match?.kind === 'basic' ? match.game : null)
   const response = skills?.state.response
 
+  useEffect(() => {
+    if (response?.phase !== 'snipe') return
+    const timer = setTimeout(() => {
+      const now = performance.now()
+      setMatch((current) => current?.kind === 'skills' && current.state.response === response
+        ? { ...current, state: expireSnipe(current.state, now) }
+        : current)
+    }, Math.max(0, response.deadline - performance.now()) + 1)
+    return () => clearTimeout(timer)
+  }, [response])
+
   function start() {
-    if (rules === 'skills') {
-      const transition = startLocalSkillGame(mode, game)
+    setTarget(null)
+    if (rules === 'skills' || rules === 'stone-skills') {
+      const transition = rules === 'skills' ? startLocalSkillGame(mode, game) : startLocalStoneSkillGame(mode, game)
       if (transition.ok) setMatch({ kind: 'skills', state: transition.state })
     } else {
       const transition = startLocalGame(mode, game)
@@ -96,13 +104,18 @@ export function LocalGame() {
   }
 
   function act(action: LocalSkillAction) {
-    setMatch((current) => current?.kind === 'skills' ? playSkillAction(current, action) : current)
+    const now = performance.now()
+    setTarget(null)
+    setMatch((current) => current?.kind === 'skills' ? playSkillAction(current, action, now) : current)
   }
 
   function place(position: Position) {
+    if (skills) {
+      act(target ? { type: 'card', cardId: target.cardId, position } : { type: 'place', position })
+      return
+    }
     setMatch((current) => {
-      if (!current) return current
-      if (current.kind === 'skills') return playSkillAction(current, { type: 'place', position })
+      if (current?.kind !== 'basic') return current
       const transition = placeLocalStone(current.game, position)
       return transition.ok ? { kind: 'basic', game: transition.state } : current
     })
@@ -125,9 +138,11 @@ export function LocalGame() {
           <SkillCatalogButton />
         </div>
         <GameNotice>
-          {skills && '스킬 테스트 · '}{gameStatus(game)}
+          {skills && (skills.state.drawPile ? '스킬 테스트 · ' : '스킬 대국 · ')}{gameStatus(game)}
           {response && ` · ${stoneLabel(response.targetId)} 방어 응답 대기`}
         </GameNotice>
+        {response?.phase === 'snipe' && <SnipeNotice position={response.position} deadline={response.deadline} />}
+        {skills?.state.snipeOutcome && <SnipeOutcome outcome={skills.state.snipeOutcome} />}
         {skills?.feedback && (
           <GameNotice tone={skills.feedback.error ? 'error' : 'info'} alert={skills.feedback.error}>
             {skills.feedback.text}
@@ -136,16 +151,11 @@ export function LocalGame() {
       </div>
       {game && (
         <div className="local-game__table" data-skills={Boolean(skills)}>
-          {skills && <LocalSkillHand state={skills.state} playerId={LOCAL_PLAYER_IDS[0]} side="black" onAction={act} />}
+          {skills && <LocalSkillHand state={skills.state} playerId={LOCAL_PLAYER_IDS[0]} side="black" onAction={act} onTarget={setTarget} />}
           <div className="local-game__board">
-            <GomokuBoard
-              cells={boardCells(game.board)}
-              size={game.board.size}
-              isSelectable={({ row, column }) => game.status === 'playing' && !response && game.board.cells[row][column] === null}
-              onSelect={place}
-            />
+            <SkillBoard game={game} skills={skills?.state} target={target} color={stoneColor} canAct onSelect={place} onCancel={() => setTarget(null)} />
           </div>
-          {skills && <LocalSkillHand state={skills.state} playerId={LOCAL_PLAYER_IDS[1]} side="white" onAction={act} />}
+          {skills && <LocalSkillHand state={skills.state} playerId={LOCAL_PLAYER_IDS[1]} side="white" onAction={act} onTarget={setTarget} />}
         </div>
       )}
     </section>
