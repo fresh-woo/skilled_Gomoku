@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '../../design-system/Button'
 import { GameChoices, GameNotice } from '../../design-system/GameControls'
+import { Modal } from '../../design-system/Modal'
 import { OnlineSkillHand } from './ui/OnlineSkillHand'
 import type { SelectedStoneSkill } from './ui/OnlineSkillHand'
 import { SkillBoard, SnipeNotice, SnipeOutcome } from './ui/SkillBoard'
@@ -64,6 +65,7 @@ export function OnlineGame() {
   const [rules, setRules] = useState('basic')
   const [code, setCode] = useState('')
   const [target, setTarget] = useState<SelectedStoneSkill | null>(null)
+  const [dismissedResult, setDismissedResult] = useState<string | null>(null)
   const socket = useRef<WebSocket | null>(null)
   const pending = useRef<Pending | null>(null)
 
@@ -145,6 +147,11 @@ export function OnlineGame() {
   const canAct = connected && !busy && (myDefense || myTurn)
   const canDefend = myDefense && canAct
   const label = (id: string) => id === 'black' ? '흑돌' : '백돌'
+  const finished = game?.status === 'finished'
+  const resultTitle = finished && (game.result.kind === 'draw' ? '무승부'
+    : game.result.winnerId === view?.playerId ? '승리' : '패배')
+  const rematchReady = view?.members.find((member) => member.id === view.playerId)?.ready
+  const showResult = finished && view && dismissedResult !== view.gameId
 
   return <section className="local-game" id="online-game" aria-labelledby="online-title">
     <div className="local-game__setup">
@@ -169,9 +176,9 @@ export function OnlineGame() {
         <p>나는 {label(view.playerId)} · {onlineRules.find(({ id }) => id === view.rules)?.title} · {view.mode === 'six-in-a-row' ? '6목' : '5목'}</p>
         <p>{view.members.map((m) => `${label(m.id)} ${m.connected ? '접속' : '재접속 대기'}${m.ready ? ' · 재대국 준비' : ''}`).join(' / ')}</p>
         {!game && <p>두 번째 플레이어가 참가하면 대국이 시작됩니다.</p>}
-        {game?.status === 'finished' && <>
-          <GameNotice>{game.result.kind === 'draw' ? '무승부' : `${label(game.result.winnerId)} 승리`}</GameNotice>
-          <Button disabled={!connected || busy || view.members.find((m) => m.id === view.playerId)?.ready} onClick={() => act({ type: 'rematch' })}>재대국 준비</Button>
+        {finished && <>
+          <GameNotice>대국 종료 · {resultTitle}</GameNotice>
+          <Button variant="secondary" onClick={() => setDismissedResult(null)}>대국 결과 보기</Button>
         </>}
       </>}
       {entry && <Button variant="secondary" onClick={leave}>방 나가기 · 대국 종료</Button>}
@@ -222,5 +229,15 @@ export function OnlineGame() {
         </fieldset>
       </div>}
     </div>}
+    {showResult && <Modal key={view.gameId} title={resultTitle || '대국 종료'}
+      onDismiss={() => setDismissedResult(view.gameId)} actions={<>
+        <Button disabled={!connected || busy || rematchReady} onClick={() => act({ type: 'rematch' })}>재대결</Button>
+        <Button variant="secondary" onClick={leave}>종료</Button>
+      </>}>
+      <GameNotice>{!connected ? '다시 연결하는 중이에요.'
+        : rematchReady ? '상대가 재대결을 요청할 때까지 기다려 주세요.'
+        : '두 플레이어가 모두 재대결을 요청하면 새 대국이 시작돼요.'}</GameNotice>
+      {error && <GameNotice tone="error" alert>{error}</GameNotice>}
+    </Modal>}
   </section>
 }
