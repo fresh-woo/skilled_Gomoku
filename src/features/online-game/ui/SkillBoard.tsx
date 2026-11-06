@@ -5,6 +5,7 @@ import { GomokuBoard } from '../../../design-system/GomokuBoard'
 import { boardCoordinate } from '../../../design-system/board-model'
 import type { BoardCell, StoneColor } from '../../../design-system/board-model'
 import type { GameState, PlayerId, Position } from '../../../entities/game/model/game'
+import { isFortified } from '../../../entities/game/model/augments'
 import { canTargetStone } from '../../../entities/game/model/skillGame'
 import type { SkillView } from '../../../entities/game/model/skillGameView'
 import type { SelectedStoneSkill } from './OnlineSkillHand'
@@ -45,14 +46,22 @@ export function SkillBoard({ game, skills, target, canAct, color, onSelect, onCa
   const board = useRef<HTMLDivElement>(null)
   const cells: Partial<Record<string, BoardCell>> = {}
   const shields = new Set(skills?.shields.map(({ position }) => boardCoordinate(position)))
+  const fortified = new Set<string>()
+  const protectedPlayers = skills?.augment?.fortifiedPlayers ?? []
   const response = skills?.response
   const selected = response?.phase === 'snipe' ? response.position : undefined
   game.board.cells.forEach((line, row) => line.forEach((stone, column) => {
     if (!stone) return
-    const key = boardCoordinate({ row, column })
+    const position = { row, column }
+    const key = boardCoordinate(position)
+    if (isFortified(game, position, protectedPlayers)) fortified.add(key)
+    const shielded = shields.has(key)
+    const marker = fortified.has(key)
+      ? { label: shielded ? '요새화, 보호막' : '요새화', symbol: '요새' }
+      : shielded ? { label: '보호막', symbol: '보호' } : undefined
     cells[key] = {
       stone: color(stone.ownerId),
-      ...(shields.has(key) ? { marker: { label: '보호막', symbol: '보호' } } : {}),
+      marker,
     }
   }))
 
@@ -65,6 +74,7 @@ export function SkillBoard({ game, skills, target, canAct, color, onSelect, onCa
     if (target && skills) {
       const actorId = game.players[game.turn.activeSeat].id
       if (target.kind === 'shield' && shields.has(boardCoordinate(position))) return false
+      if (target.kind === 'snipe' && fortified.has(boardCoordinate(position))) return false
       return canTargetStone(skills, actorId, target.kind, position)
     }
     return game.board.cells[position.row][position.column] === null

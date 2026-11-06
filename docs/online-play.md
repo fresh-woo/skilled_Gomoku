@@ -44,7 +44,7 @@ npm run server
 
 ## 실제 메시지
 
-승인된 행동에는 별도 `sound` 메시지(`gameId`, `revision`, `cues`)를 현재 연결된 두 플레이어에게 보낸다. 공개 효과 종류만 담고 카드 ID나 손패는 보내지 않는다. 거부·중복 요청에서는 재발행하지 않고 스냅샷에도 넣지 않는다. 클라이언트는 참가/재접속의 첫 스냅샷으로 기준 revision을 잡아 이전 소리와 동일 이벤트를 다시 재생하지 않는다. 오디오 전달은 상태 저장·복구와 독립적이다.
+승인된 착수와 카드 사용에는 별도 `sound` 메시지(`gameId`, `revision`, `cues`)를 현재 연결된 두 플레이어에게 보낸다. 공개 효과 종류만 담고 카드 ID나 손패는 보내지 않는다. 거부·중복 요청에서는 재발행하지 않고 스냅샷에도 넣지 않는다. 클라이언트는 참가/재접속의 첫 스냅샷으로 기준 revision을 잡아 이전 소리와 동일 이벤트를 다시 재생하지 않는다. 오디오 전달은 상태 저장·복구와 독립적이다.
 
 모든 요청은 `v:1`, `requestId`를 포함한다. `src/features/online-game/protocol.ts`가 화면에 전달할 타입을 정의하며 서버는 런타임에서 메시지를 검증한다. 이전 `experiments/websocket/contracts.ts`는 과거 설계 실험이며 실제 API가 아니다.
 
@@ -57,7 +57,7 @@ npm run server
 | command | gameId, revision, action | result와 각자의 snapshot |
 | leave | 없음 | 방 종료, 두 소켓 close(4003) |
 
-action은 `place-stone(position)`, `use-skill(cardId, position?)`, `respond(attackId, cardId?, discardCardId?)`, `rematch`다. 각 방은 동기적으로 공통 규칙을 호출한다. 승인된 게임 전이와 서버의 방어 마감 처리, 새 대국에서 revision이 증가한다. `(플레이어, requestId)`의 입력과 결과를 보관해 동일 입력의 재전송에는 같은 결과를 반환한다. 다른 입력의 ID 재사용은 거부하고 오래된 gameId/revision도 거부한다. 대국당 자리별 2048개 결과까지 보관하며 한도를 넘으면 추가 명령을 거부한다. 재대국 시 게임 ID와 기록을 갱신한다.
+action은 `place-stone(position)`, `use-skill(cardId, position?)`, `respond(attackId, cardId?, discardCardId?)`, `choose-augment(augmentId, round)`, `rematch`다. 각 방은 동기적으로 공통 규칙을 호출한다. 승인된 게임 전이와 서버의 방어 마감 처리, 새 대국에서 revision이 증가한다. `(플레이어, requestId)`의 입력과 결과를 보관해 동일 입력의 재전송에는 같은 결과를 반환한다. 다른 입력의 ID 재사용과 오래된 gameId를 거부한다. 이전 revision의 증강 선택은 같은 라운드의 선택이 열려 있을 때만 받아들인다. 대국당 자리별 2048개 결과까지 보관하며 한도를 넘으면 추가 명령을 거부한다. 재대국 시 게임 ID와 기록을 갱신한다.
 
 클라이언트는 한 번에 한 명령만 보내고 응답 전 끊기면 재접속 스냅샷 수신 후 같은 ID로 재전송한다. 새로고침에서는 미응답 명령을 새 ID로 다시 실행하지 않고 서버 스냅샷으로 확정된 결과를 확인한다. 승인된 상태 전이만 카드 지급을 수행하며 복구는 규칙 초기화를 호출하지 않는다.
 

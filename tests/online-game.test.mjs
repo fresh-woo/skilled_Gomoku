@@ -30,6 +30,7 @@ async function client(url) {
 test('online snipe keeps a private, idempotent defense across reconnect and resolves without a defender', { timeout: 25000 }, async (t) => {
   const draws = [0, 1, 3, 2, 0]
   const ctx = await setup(t, 'five-in-a-row', 'stone-skills', { drawCard: () => draws.shift() ?? 0 })
+  await chooseInitialFortification(ctx)
   let view = ctx.view
   assert.equal(view.rules, 'skills')
   const [first, second] = view.game.players.map(({ id }) => id)
@@ -138,6 +139,57 @@ async function command(client, view, action, extra = {}) {
   return { result, view: next, requestId }
 }
 
+async function chooseInitialFortification(ctx) {
+  const action = { type: 'choose-augment', round: 1, augmentId: 'fortification' }
+  assert.equal((await command(ctx.a, ctx.view, action)).result.ok, true)
+  assert.equal((await command(ctx.b, ctx.view, action)).result.ok, true)
+  ctx.view = await ctx.a.next('snapshot', (m) => m.skills?.augment.pending === false)
+}
+
+test('online augment choices wait for both players and survive reconnect without regranting cards', async (t) => {
+  const ctx = await setup(t, 'five-in-a-row', 'skills', { drawCard: () => 0 })
+  const initial = ctx.view
+  assert.deepEqual(initial.skills.augment.choices, ['card-bundle', 'fortification'])
+  assert.equal(initial.skills.augment.pending, true)
+  const active = initial.game.players[0].id === 'black' ? ctx.a : ctx.b
+  const blocked = await command(active, initial, { type: 'place-stone', position: { row: 0, column: 0 } })
+  assert.equal(blocked.result.code, 'augment-pending')
+
+  const choose = { type: 'choose-augment', round: 1, augmentId: 'card-bundle' }
+  const badRound = await command(ctx.a, initial, { ...choose, round: 6 })
+  assert.equal(badRound.result.code, 'invalid-augment')
+  const picked = await command(ctx.a, initial, choose)
+  assert.equal(picked.result.ok, true)
+  assert.equal(picked.view.handCounts.black, initial.handCounts.black + 4)
+  assert.deepEqual(picked.view.skills.augment.owned, ['card-bundle'])
+  assert.deepEqual(picked.view.skills.augment.choices, [])
+  assert.equal(picked.view.skills.augment.pending, true)
+  const duplicate = await command(ctx.a, initial, choose, { requestId: picked.requestId })
+  assert.deepEqual(duplicate.result, picked.result)
+  const alreadyPicked = await command(ctx.a, picked.view, { ...choose, augmentId: 'fortification' })
+  assert.equal(alreadyPicked.result.code, 'invalid-augment')
+
+  await ctx.b.close()
+  const restored = await client(ctx.url)
+  restored.send({ type: 'resume', token: ctx.sessionB.token })
+  await restored.next('session')
+  const rejoined = await restored.next('snapshot')
+  assert.deepEqual(rejoined.skills.augment.choices, initial.skills.augment.choices)
+  assert.deepEqual(rejoined.skills.augment.owned, [])
+  assert.equal(rejoined.skills.hands.black, undefined)
+  assert.equal(rejoined.skills.augmentOffer, undefined)
+  const finished = await command(restored, initial, { ...choose, augmentId: 'fortification' })
+  assert.equal(finished.result.ok, true)
+  assert.equal(finished.view.skills.augment.pending, false)
+  assert.deepEqual(finished.view.skills.augment.fortifiedPlayers, ['white'])
+  const mirrored = await ctx.a.next('snapshot', (m) => m.revision === finished.view.revision)
+  assert.deepEqual(mirrored.game, finished.view.game)
+  assert.equal(mirrored.handCounts.black, initial.handCounts.black + 4)
+  ctx.a.send({ type: 'sync' })
+  await ctx.a.next('snapshot', (m) => m.revision === finished.view.revision)
+  assert.deepEqual(ctx.a.sounds(), [])
+})
+
 for (const [mode, length] of [['five-in-a-row', 5], ['six-in-a-row', 6]]) {
   test(`online ${mode}: authorized turns, exact win, two-party rematch`, { timeout: 15000 }, async (t) => {
     const ctx = await setup(t, mode)
@@ -211,6 +263,7 @@ test('authority, idempotency, revision race, room capacity, resume and fencing',
 test('skill play, private projection, defense and resume do not redraw', { timeout: 15000 }, async (t) => {
   const draws = [3, 3, 4, 4, 5]
   const ctx = await setup(t, 'five-in-a-row', 'skills', { drawCard: () => draws.shift() ?? 6 })
+  await chooseInitialFortification(ctx)
   let view = ctx.view
   const firstId = view.game.players[0].id
   const first = firstId === 'black' ? ctx.a : ctx.b
