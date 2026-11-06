@@ -1,5 +1,6 @@
 import type { GameState, Position } from '../../entities/game/model/game'
 import type { SkillView } from '../../entities/game/model/skillGameView'
+import type { OnlineTurn } from '../../entities/game/model/onlineTurn'
 export type OnlineAction =
   | { type: 'place-stone'; position: Position }
   | { type: 'use-skill'; cardId: number; position?: Position }
@@ -10,5 +11,6 @@ export type Snapshot = {
   playerId: string; mode: string; rules: string
   members: { id: string; connected: boolean; ready: boolean }[]
   game: GameState | null; skills: SkillView | null
+  turn: OnlineTurn
   handCounts: Record<string, number>
 }

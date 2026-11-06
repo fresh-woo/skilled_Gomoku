@@ -52,6 +52,7 @@ test('online snipe keeps a private, idempotent defense across reconnect and reso
   view = snipe.view
   const pending = view.skills.response
   assert.equal(pending.phase, 'snipe')
+  assert.deepEqual(view.turn, { phase: 'waiting-defense', activePlayerId: first, round: view.game.turn.round })
   assert.deepEqual(pending.position, target)
   assert.equal(pending.targetId, second)
   assert.equal(view.skills.hands[second], undefined)
@@ -64,6 +65,7 @@ test('online snipe keeps a private, idempotent defense across reconnect and reso
   await resumed.next('session')
   const restored = await resumed.next('snapshot')
   assert.deepEqual(restored.skills.response, pending)
+  assert.deepEqual(restored.turn, { ...view.turn, phase: 'defend' })
   assert.equal(restored.skills.hands[first], undefined)
   const [nullify, cost] = restored.skills.hands[second]
   assert.deepEqual([nullify.skill.kind, cost.skill.kind], ['nullify', 'shield'])
@@ -78,10 +80,12 @@ test('online snipe keeps a private, idempotent defense across reconnect and reso
   assert.deepEqual(retry.result, canceled.result)
   assert.equal(retry.view.handCounts[second], 0)
   assert.equal(retry.view.skills.snipeOutcome, 'nullified')
+  assert.equal(retry.view.turn.phase, 'opponent-turn')
   assert.deepEqual(retry.view.game.turn, view.game.turn)
   assert.equal(retry.view.game.board.cells[2][0].ownerId, second)
   const attackView = await attacker.next('snapshot', (m) => m.revision === canceled.view.revision)
   assert.equal(attackView.skills.hands[second], undefined)
+  assert.equal(attackView.turn.phase, 'my-turn')
   assert.equal(JSON.stringify(attackView).includes('discardCardId'), false)
 
   const place = await command(attacker, attackView, { type: 'place-stone', position: { row: 0, column: 2 } })

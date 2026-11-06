@@ -8,6 +8,7 @@ import { applyCommand, startGame } from '../src/entities/game/model/game.ts'
 import { applySkillCommand, expireSnipe, offerRoundAugments, ONLINE_SKILL_COUNT, startSkillGame } from '../src/entities/game/model/skillGame.ts'
 import { projectSkillGame } from '../src/entities/game/model/skillGameView.ts'
 import { actionSounds } from '../src/entities/game/model/soundEvents.ts'
+import { projectOnlineTurn } from '../src/entities/game/model/onlineTurn.ts'
 
 export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600_000, origins = [], drawCard = () => randomInt(ONLINE_SKILL_COUNT) } = {}) {
   const rooms = new Map()
@@ -44,11 +45,12 @@ export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600
   function snapshot(room, member) {
     const skill = room.skills
     const skills = skill ? projectSkillGame(skill, member.id) : null
+    const game = skills?.game ?? room.game
     return {
       type: 'snapshot', roomId: room.id, gameId: room.gameId, revision: room.revision, serverTime: Date.now(),
       playerId: member.id, mode: room.mode, rules: room.rules,
       members: room.members.map((m) => ({ id: m.id, connected: !!m.ws, ready: m.ready })),
-      game: skills?.game ?? room.game,
+      game, turn: projectOnlineTurn(game, skills, member.id),
       skills,
       handCounts: skill ? Object.fromEntries(room.members.map((m) => [m.id, skill.hands[m.id].length])) : {},
     }
