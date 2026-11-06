@@ -5,6 +5,8 @@ import { OnlineSkillHand } from './ui/OnlineSkillHand'
 import type { SelectedStoneSkill } from './ui/OnlineSkillHand'
 import { SkillBoard, SnipeNotice, SnipeOutcome } from './ui/SkillBoard'
 import { SkillCatalogButton } from '../skill-catalog/SkillCatalog'
+import { AUGMENTS } from '../../entities/game/model/augments'
+import { AugmentChoice } from './ui/AugmentChoice'
 import type { OnlineAction, Snapshot } from './protocol'
 
 const storageKey = 'gomoku-online-session-v1'
@@ -24,6 +26,9 @@ const errors: Record<string, string> = {
   'invalid-target': '이 카드의 대상이 될 수 없는 돌이에요.',
   'already-shielded': '이미 보호막이 있는 돌이에요.',
   'skill-used-this-turn': '이번 턴에 이미 사용한 카드 종류예요.',
+  'invalid-augment': '지금 선택할 수 있는 증강이 아니에요.',
+  'augment-pending': '두 플레이어의 증강 선택이 끝나야 대국을 진행할 수 있어요.',
+  'fortified-target': '요새화로 보호받는 돌에는 저격을 사용할 수 없어요.',
 }
 const onlineRules = [
   { id: 'basic', title: '기본 대국', description: '돌을 번갈아 놓아요.' },
@@ -115,9 +120,10 @@ export function OnlineGame() {
   }
   const game = view?.game
   const response = view?.skills?.response
+  const augment = view?.skills?.augment
   const myTurn = game?.status === 'playing' && game.players[game.turn.activeSeat].id === view?.playerId
   const myDefense = Boolean(response && response.targetId === view?.playerId)
-  const canAct = connected && !busy && (response ? myDefense : myTurn)
+  const canAct = connected && !busy && !augment?.pending && (response ? myDefense : myTurn)
   const canDefend = myDefense && canAct
   const label = (id: string) => id === 'black' ? '흑돌' : '백돌'
 
@@ -155,10 +161,11 @@ export function OnlineGame() {
       <div className="local-game__board">
         {game.status === 'playing' && (
           <GameNotice tone={canDefend ? 'warning' : 'info'}>
-            <strong>{myTurn ? '내 턴' : '상대 턴'}</strong> · {game.turn.round}라운드
+            <strong>{augment?.pending ? '증강 선택 중' : myTurn ? '내 턴' : '상대 턴'}</strong> · {game.turn.round}라운드
             <div>
               {!connected ? '다시 연결하는 중이에요.'
                 : busy ? '행동을 처리하고 있어요.'
+                : augment?.pending ? augment.choices.length ? '두 사람이 모두 고르면 대국을 진행해요.' : '상대가 고를 때까지 기다려 주세요.'
                 : canDefend ? <>방어 응답 가능 · <a href="#online-skill-hand">손패로 이동</a></>
                 : response ? '상대의 방어 응답을 기다려 주세요.'
                 : target ? '판에서 카드의 대상을 고르세요.'
@@ -167,12 +174,18 @@ export function OnlineGame() {
             </div>
           </GameNotice>
         )}
+        {augment?.pending && error && <GameNotice tone="error" alert>{error}</GameNotice>}
+        {game.status === 'playing' && Boolean(augment?.choices.length) && augment && (
+          <AugmentChoice key={`${view?.gameId}-${game.turn.round}`} choices={augment.choices} disabled={!connected || busy}
+            onChoose={(augmentId) => act({ type: 'choose-augment', augmentId, round: game.turn.round })} />
+        )}
         <SkillBoard game={game} skills={view?.skills} target={target} color={(id) => id === 'black' ? 'black' : 'white'} canAct={Boolean(canAct)}
           onSelect={(position) => act(target ? { type: 'use-skill', cardId: target.cardId, position } : { type: 'place-stone', position })}
           onCancel={() => setTarget(null)} />
       </div>
       {view?.skills && <div className="local-game__hands" id="online-skill-hand" tabIndex={-1}>
-        {error && <GameNotice tone="error" alert>{error}</GameNotice>}
+        {error && !augment?.pending && <GameNotice tone="error" alert>{error}</GameNotice>}
+        {Boolean(augment?.owned.length) && <p>내 증강 · {augment?.owned.map((id) => AUGMENTS[id].title).join(', ')}</p>}
         {response?.phase === 'snipe' && <SnipeNotice position={response.position} deadline={response.deadline - view.serverTime + view.receivedAt} />}
         {response?.phase === 'before' && <GameNotice>무장해제 적용 전에 방어할 수 있어요.</GameNotice>}
         {response?.phase === 'after' && <GameNotice>무장해제로 버린 카드를 복구할 수 있어요.</GameNotice>}

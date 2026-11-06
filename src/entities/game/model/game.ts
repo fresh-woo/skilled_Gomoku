@@ -126,11 +126,12 @@ function countStones(
   return count
 }
 
-function hasWinningLine(board: Board, position: Position, player: Player): boolean {
+export function hasExactLine(board: Board, position: Position, playerId: PlayerId, length: number): boolean {
+  if (board.cells[position.row]?.[position.column]?.ownerId !== playerId) return false
   return directions.some(([rowStep, columnStep]) => {
-    const forward = countStones(board, position, player.id, rowStep, columnStep)
-    const backward = countStones(board, position, player.id, -rowStep, -columnStep)
-    return 1 + forward + backward === player.winCondition.lineLength
+    const forward = countStones(board, position, playerId, rowStep, columnStep)
+    const backward = countStones(board, position, playerId, -rowStep, -columnStep)
+    return 1 + forward + backward === length
   })
 }
 
@@ -171,7 +172,7 @@ export function applyCommand(
   const board = withStone(state.board, command.position, { ownerId: player.id })
   const game = { mode, players, board }
 
-  if (hasWinningLine(board, command.position, player)) {
+  if (hasExactLine(board, command.position, player.id, player.winCondition.lineLength)) {
     const result: GameResult = { kind: 'win', winnerId: player.id }
     return { ok: true, state: { ...game, status: 'finished', result }, events: [] }
   }

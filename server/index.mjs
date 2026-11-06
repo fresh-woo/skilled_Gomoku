@@ -5,7 +5,8 @@ import { resolve, extname, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { WebSocketServer, WebSocket } from 'ws'
 import { applyCommand, startGame } from '../src/entities/game/model/game.ts'
-import { applySkillCommand, expireSnipe, ONLINE_SKILL_COUNT, startSkillGame } from '../src/entities/game/model/skillGame.ts'
+import { applySkillCommand, expireSnipe, offerRoundAugments, ONLINE_SKILL_COUNT, startSkillGame } from '../src/entities/game/model/skillGame.ts'
+import { projectSkillGame } from '../src/entities/game/model/skillGameView.ts'
 
 export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600_000, origins = [], drawCard = () => randomInt(ONLINE_SKILL_COUNT) } = {}) {
   const rooms = new Map()
@@ -40,25 +41,14 @@ export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600
     if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ v: 1, ...message }))
   }
   function snapshot(room, member) {
-    const game = room.skills?.game ?? room.game
     const skill = room.skills
-    const response = skill?.response
-    // Explicit allowlist: no other hand, deck, RNG, scheduled effects or discarded-card payload.
+    const skills = skill ? projectSkillGame(skill, member.id) : null
     return {
       type: 'snapshot', roomId: room.id, gameId: room.gameId, revision: room.revision, serverTime: Date.now(),
       playerId: member.id, mode: room.mode, rules: room.rules,
       members: room.members.map((m) => ({ id: m.id, connected: !!m.ws, ready: m.ready })),
-      game,
-      skills: skill ? {
-        game, hands: { [member.id]: skill.hands[member.id] },
-        response: response ? {
-          id: response.id, targetId: response.targetId, phase: response.phase,
-          ...(response.phase === 'snipe' ? { position: response.position, deadline: response.deadline } : {}),
-        } : null,
-        shields: skill.shields,
-        usedStoneSkills: skill.usedStoneSkills,
-        snipeOutcome: skill.snipeOutcome,
-      } : null,
+      game: skills?.game ?? room.game,
+      skills,
       handCounts: skill ? Object.fromEntries(room.members.map((m) => [m.id, skill.hands[m.id].length])) : {},
     }
   }
@@ -87,7 +77,9 @@ export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600
     const players = previous ? [...previous.players].reverse().map((p) => p.id)
       : (randomInt(2) ? ['black', 'white'] : ['white', 'black'])
     room.gameId = randomUUID()
-    if (room.rules === 'skills') room.skills = startSkillGame(room.mode, players, null, randomInt(0x100000000), drawCard()).state
+    if (room.rules === 'skills') {
+      room.skills = offerRoundAugments(startSkillGame(room.mode, players, null, randomInt(0x100000000), drawCard()).state)
+    }
     else room.game = startGame(room.mode, players).state
     for (const m of room.members) { m.ready = false; m.results.clear() }
     room.revision++
@@ -154,9 +146,13 @@ export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600
       const result = { type: 'result', requestId: msg.requestId, ok: false, code: '', revision: room.revision }
       const action = msg.action
       const game = room.skills?.game ?? room.game
+      // Both players may choose from the same snapshot while this round's offer is open.
+      const currentOffer = action?.type === 'choose-augment' && room.skills?.augmentOffer &&
+        action.round === game?.turn?.round && Number.isSafeInteger(msg.revision) &&
+        msg.revision >= 0 && msg.revision <= room.revision
       if (member.results.size >= 2048) { fail('HISTORY_FULL'); return }
       if (!game || msg.gameId !== room.gameId) result.code = 'WRONG_GAME'
-      else if (msg.revision !== room.revision) result.code = 'STALE_REVISION'
+      else if (msg.revision !== room.revision && !currentOffer) result.code = 'STALE_REVISION'
       else if (!action || typeof action !== 'object') result.code = 'INVALID_ACTION'
       else if (action.type === 'rematch') {
         if (game.status !== 'finished') result.code = 'GAME_NOT_FINISHED'
@@ -179,6 +175,8 @@ export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600
           (action.cardId === undefined || Number.isSafeInteger(action.cardId)) &&
           (action.discardCardId === undefined || Number.isSafeInteger(action.discardCardId))) {
           command = { type: action.type, actorId: member.id, attackId: action.attackId, cardId: action.cardId, discardCardId: action.discardCardId }
+        } else if (action.type === 'choose-augment' && typeof action.augmentId === 'string' && Number.isSafeInteger(action.round)) {
+          command = { type: action.type, actorId: member.id, augmentId: action.augmentId, round: action.round }
         }
         if (!command || (!room.skills && command.type !== 'place-stone')) result.code = 'INVALID_ACTION'
         else {
@@ -187,7 +185,7 @@ export function createOnlineServer({ port = 0, host = '127.0.0.1', graceMs = 600
           if (!transition.ok) result.code = transition.reason
           else {
             if (room.skills) {
-              room.skills = transition.state
+              room.skills = transition.events.length ? offerRoundAugments(transition.state) : transition.state
               scheduleDefense(room)
             }
             else room.game = transition.state

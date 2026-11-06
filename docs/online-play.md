@@ -55,7 +55,7 @@ npm run server
 | command | gameId, revision, action | result와 각자의 snapshot |
 | leave | 없음 | 방 종료, 두 소켓 close(4003) |
 
-action은 `place-stone(position)`, `use-skill(cardId, position?)`, `respond(attackId, cardId?, discardCardId?)`, `rematch`다. 각 방은 동기적으로 공통 규칙을 호출한다. 승인된 게임 전이와 서버의 방어 마감 처리, 새 대국에서 revision이 증가한다. `(플레이어, requestId)`의 입력과 결과를 보관해 동일 입력의 재전송에는 같은 결과를 반환한다. 다른 입력의 ID 재사용은 거부하고 오래된 gameId/revision도 거부한다. 대국당 자리별 2048개 결과까지 보관하며 한도를 넘으면 추가 명령을 거부한다. 재대국 시 게임 ID와 기록을 갱신한다.
+action은 `place-stone(position)`, `use-skill(cardId, position?)`, `respond(attackId, cardId?, discardCardId?)`, `choose-augment(augmentId, round)`, `rematch`다. 각 방은 동기적으로 공통 규칙을 호출한다. 승인된 게임 전이와 서버의 방어 마감 처리, 새 대국에서 revision이 증가한다. `(플레이어, requestId)`의 입력과 결과를 보관해 동일 입력의 재전송에는 같은 결과를 반환한다. 다른 입력의 ID 재사용과 오래된 gameId를 거부한다. 이전 revision의 증강 선택은 같은 라운드의 선택이 열려 있을 때만 받아들인다. 대국당 자리별 2048개 결과까지 보관하며 한도를 넘으면 추가 명령을 거부한다. 재대국 시 게임 ID와 기록을 갱신한다.
 
 클라이언트는 한 번에 한 명령만 보내고 응답 전 끊기면 재접속 스냅샷 수신 후 같은 ID로 재전송한다. 새로고침에서는 미응답 명령을 새 ID로 다시 실행하지 않고 서버 스냅샷으로 확정된 결과를 확인한다. 승인된 상태 전이만 카드 지급을 수행하며 복구는 규칙 초기화를 호출하지 않는다.
 

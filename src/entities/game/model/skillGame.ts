@@ -1,4 +1,6 @@
 import { applyCommand, destroyStone, isBoardPosition, startGame } from './game.ts'
+import { AUGMENTS, isFortified } from './augments.ts'
+import type { AugmentId } from './augments.ts'
 import type {
   CommandRejection, GameCommand, GameMode, GameState, PlayerId, PlayingGame, Position, TurnStarted,
 } from './game.ts'
@@ -43,15 +45,19 @@ export type SkillGame = Readonly<{
   shields: readonly Shield[]
   usedStoneSkills: readonly TurnSkill[]
   snipeOutcome: 'destroyed' | 'shielded' | 'nullified' | null
+  augments: Readonly<Record<PlayerId, readonly AugmentId[]>>
+  augmentOffer: Readonly<Record<PlayerId, readonly AugmentId[]>> | null
 }>
 
 type SkillCommand = GameCommand
   | Readonly<{ type: 'use-skill'; actorId: PlayerId; cardId: number; targetId?: PlayerId; position?: Position }>
   | Readonly<{ type: 'respond'; actorId: PlayerId; attackId: number; cardId?: number; discardCardId?: number }>
+  | Readonly<{ type: 'choose-augment'; actorId: PlayerId; augmentId: string; round: number }>
 
 type Rejection = CommandRejection | 'invalid-player-order' | 'response-pending' |
   'invalid-response' | 'card-not-in-hand' | 'invalid-skill-timing' | 'invalid-target' | 'invalid-boundary' |
-  'invalid-nullify-cost' | 'already-shielded' | 'response-expired' | 'skill-used-this-turn'
+  'invalid-nullify-cost' | 'already-shielded' | 'response-expired' | 'skill-used-this-turn' |
+  'augment-pending' | 'invalid-augment' | 'fortified-target'
 type Transition =
   | Readonly<{ ok: true; state: SkillGame; events: readonly TurnStarted[] }>
   | Readonly<{ ok: false; reason: Rejection }>
@@ -84,6 +90,56 @@ function roll(seed: number): number {
   return (Math.imul(seed, 1664525) + 1013904223) >>> 0
 }
 
+function drawOnlineCard(seed: number): { skill: Skill; randomSeed: number } {
+  let randomSeed = seed
+  // Reject the remainder of the 32-bit range before selecting a card by modulo.
+  do { randomSeed = roll(randomSeed) } while (randomSeed >= fairDrawLimit)
+  return { skill: onlineSkills[randomSeed % ONLINE_SKILL_COUNT], randomSeed }
+}
+
+function grantCard(state: SkillGame, playerId: PlayerId, skill: Skill): SkillGame {
+  const hand = [...state.hands[playerId], { id: state.nextDraw, skill }]
+  return { ...replaceHand(state, playerId, hand), nextDraw: state.nextDraw + 1 }
+}
+
+export function offerRoundAugments(state: SkillGame): SkillGame {
+  const { game } = state
+  if (state.augmentOffer || state.response || game.status !== 'playing' ||
+    game.turn.activeSeat !== 0 || (game.turn.round - 1) % 5 !== 0) return state
+
+  const pool = Object.keys(AUGMENTS) as AugmentId[]
+  const offers = Object.fromEntries(game.players.map(({ id }) => [
+    id, pool.filter((augment) => !state.augments[id].includes(augment)).slice(0, 3),
+  ]))
+  return Object.values(offers).some((choices) => choices.length > 0)
+    ? { ...state, augmentOffer: offers }
+    : state
+}
+
+function chooseAugment(state: SkillGame, actorId: PlayerId, requestedId: string): Transition {
+  const offer = state.augmentOffer
+  const choice = offer?.[actorId]?.find((id) => id === requestedId)
+  if (!offer || !choice) return { ok: false, reason: 'invalid-augment' }
+
+  const remaining = { ...offer, [actorId]: [] }
+  let next: SkillGame = {
+    ...state,
+    augments: { ...state.augments, [actorId]: [...state.augments[actorId], choice] },
+    augmentOffer: Object.values(remaining).some((choices) => choices.length > 0) ? remaining : null,
+  }
+  if (choice === 'card-bundle') {
+    for (let count = 0; count < 4; count++) {
+      const { skill, randomSeed } = drawOnlineCard(next.randomSeed)
+      next = { ...grantCard(next, actorId, skill), randomSeed }
+    }
+  }
+  return accept(next)
+}
+
+export function fortifiedPlayers(state: Pick<SkillGame, 'game' | 'augments'>): PlayerId[] {
+  return state.game.players.filter(({ id }) => state.augments[id].includes('fortification')).map(({ id }) => id)
+}
+
 function discard(state: SkillGame, targetId: PlayerId): { state: SkillGame; discarded?: Card } {
   const hand = state.hands[targetId]
   if (!hand.length) return { state }
@@ -112,18 +168,16 @@ function applyTurnStart(state: SkillGame, event: TurnStarted, drawIndex?: number
     if (effect.kind === 'discard') next = discard(next, effect.targetId).state
   }
 
-  let randomSeed = next.randomSeed
-  if (!next.drawPile && drawIndex === undefined) {
-    // Reject the remainder of the 32-bit range before selecting a card by modulo.
-    do { randomSeed = roll(randomSeed) } while (randomSeed >= fairDrawLimit)
+  if (next.drawPile) {
+    const skill = next.drawPile[next.nextDraw]
+    return skill ? grantCard(next, event.playerId, skill) : next
   }
-  const skill = next.drawPile
-    ? next.drawPile[next.nextDraw]
-    : onlineSkills[drawIndex ?? randomSeed % ONLINE_SKILL_COUNT]
-  if (!skill) return next
-
-  const hand = [...next.hands[event.playerId], { id: next.nextDraw, skill }]
-  return { ...replaceHand(next, event.playerId, hand), nextDraw: next.nextDraw + 1, randomSeed }
+  if (drawIndex !== undefined) {
+    const skill = onlineSkills[drawIndex]
+    return skill ? grantCard(next, event.playerId, skill) : next
+  }
+  const { skill, randomSeed } = drawOnlineCard(next.randomSeed)
+  return { ...grantCard(next, event.playerId, skill), randomSeed }
 }
 
 export function startSkillGame(
@@ -147,6 +201,8 @@ export function startSkillGame(
     shields: [],
     usedStoneSkills: [],
     snipeOutcome: null,
+    augments: Object.fromEntries(players.map((id) => [id, []])),
+    augmentOffer: null,
   }
   return accept(start.events.reduce((next, event) => applyTurnStart(next, event, drawIndex), state), start.events)
 }
@@ -175,6 +231,9 @@ function playSkill(
     }
     if (skill.kind === 'shield' && state.shields.some((shield) => samePosition(shield.position, position))) {
       return { ok: false, reason: 'already-shielded' }
+    }
+    if (skill.kind === 'snipe' && isFortified(game, position, fortifiedPlayers(state))) {
+      return { ok: false, reason: 'fortified-target' }
     }
     if (state.usedStoneSkills.includes(skill.kind)) return { ok: false, reason: 'skill-used-this-turn' }
     const next: SkillGame = {
@@ -292,6 +351,11 @@ function respond(
 export function applySkillCommand(state: SkillGame, command: SkillCommand, now = 0, drawIndex?: number): Transition {
   const game = state.game
   if (game.status === 'finished') return { ok: false, reason: 'game-finished' }
+  if (command.type === 'choose-augment') {
+    if (game.turn.round !== command.round) return { ok: false, reason: 'invalid-augment' }
+    return chooseAugment(state, command.actorId, command.augmentId)
+  }
+  if (state.augmentOffer) return { ok: false, reason: 'augment-pending' }
   if (command.type === 'respond') return respond(state, game, command, now)
   if (state.response) return { ok: false, reason: 'response-pending' }
   if (command.type === 'use-skill') {
