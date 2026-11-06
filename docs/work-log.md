@@ -1,5 +1,13 @@
 # 작업 기록
 
+## Render 공개 시험 배포 — 2026-11-07
+
+- GitHub 인증과 협업 권한 확인 후 기능 브랜치를 푸시했다. [PR #4](https://github.com/fresh-woo/skilled_Gomoku/pull/4)의 push/PR CI 성공과 충돌 없음을 확인해 main에 병합했다. 기준 커밋은 `c69582679fdc2ad4c772c6fa9add9321a3c8ec45`다.
+- 승인된 My Workspace에 Render free 웹 서비스 한 개를 싱가포르에 생성했다. [공개 주소](https://skilled-gomoku.onrender.com/#online-game), [서비스 관리](https://dashboard.render.com/web/srv-dbn116u1egvs73dqa75g). DB와 유료 리소스는 생성하지 않았다.
+- Render 배포 `dep-dbn117m1egvs73dqa8a0`의 live, main CI 성공과 실제 공개 health의 SHA를 확인했다. `npm run verify:online -- https://skilled-gomoku.onrender.com c69582679fdc2ad4c772c6fa9add9321a3c8ec45`가 기본/스킬 WSS 접속·서버 착수·두 클라이언트 동기화·손패 분리·동일 신원 복구를 통과했다.
+- 실제 배포 설정은 main commit 기반 자동 배포이며 Render 빌드에서도 lint·test·build를 모두 검사한다. After CI Checks Pass 모드와 HTTP health 경로는 연결 도구 미지원 및 대시보드 별도 로그인으로 변경하지 않았다. 기본 TCP 검사가 사용된다.
+- 브랜치/PR/배포 방법과 한계를 [운영 문서](github-and-deployment.md)에 기록했다. 영속 복구와 서로 다른 실제 기기·네트워크 검증은 미완료다. 이번 문서 PR로 Git push 기반 자동 배포의 실제 트리거도 후속 확인한다.
+
 ## Render 시험 배포 준비 — 2026-11-07
 
 - 사용자가 Render `My Workspace`의 무료 웹 서비스 한 개와 DB 없는 시험 배포를 승인했다. 현재 서비스는 없으며 원격 배포 완료 여부는 후속 결과로 기록한다.

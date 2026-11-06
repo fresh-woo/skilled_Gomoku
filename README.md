@@ -1,6 +1,8 @@
 # Skilled Gomoku
 
-React와 TypeScript로 만드는 턴제 오목 게임입니다. 현재 브라우저에서 2인 로컬 대국을 플레이할 수 있습니다.
+React와 TypeScript로 만드는 턴제 오목 게임입니다. 브라우저에서 로컬 또는 온라인 2인 대국을 플레이할 수 있습니다.
+
+[온라인 대국 실행](https://skilled-gomoku.onrender.com/#online-game)에서 방을 만들고 상대에게 방 코드를 전달하세요. 무료 시험 서버로 첫 접속이 지연될 수 있으며 서버 재시작 시 진행 중 대국은 사라집니다.
 
 ## 시작하기
 
