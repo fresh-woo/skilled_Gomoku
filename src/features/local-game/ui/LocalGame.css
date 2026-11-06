@@ -23,3 +23,30 @@
 .local-game .game-choice {
   margin-block-start: 0;
 }
+
+.local-game__skills {
+  display: grid;
+  gap: var(--space-2);
+  min-inline-size: 0;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.local-game__skills .game-choices {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+}
+
+.local-game__skills h3,
+.local-game__skills p {
+  margin: 0;
+}
+
+.local-game__skills h3 {
+  font-size: 1rem;
+}
+
+.local-game__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
