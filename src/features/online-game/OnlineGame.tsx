@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '../../design-system/Button'
 import { GameChoices, GameNotice } from '../../design-system/GameControls'
+import { Modal } from '../../design-system/Modal'
 import { OnlineSkillHand } from './ui/OnlineSkillHand'
 import type { SelectedStoneSkill } from './ui/OnlineSkillHand'
 import { SkillBoard, SnipeNotice, SnipeOutcome } from './ui/SkillBoard'
+import { Countdown } from './ui/Countdown'
 import { SkillCatalogButton } from '../skill-catalog/SkillCatalog'
 import { AUGMENTS } from '../../entities/game/model/augments'
 import { AugmentChoice } from './ui/AugmentChoice'
@@ -24,7 +26,6 @@ const errors: Record<string, string> = {
   'not-active-player': '지금은 상대 차례예요.',
   'response-pending': '방어 응답이 끝날 때까지 기다려 주세요.',
   'response-expired': '방어 응답 시간이 지났어요.',
-  'invalid-nullify-cost': '무효화와 함께 버릴 다른 카드 1장을 골라 주세요.',
   'invalid-target': '이 카드의 대상이 될 수 없는 돌이에요.',
   'already-shielded': '이미 보호막이 있는 돌이에요.',
   'skill-used-this-turn': '이번 턴에 이미 사용한 카드 종류예요.',
@@ -64,6 +65,7 @@ export function OnlineGame() {
   const [rules, setRules] = useState('basic')
   const [code, setCode] = useState('')
   const [target, setTarget] = useState<SelectedStoneSkill | null>(null)
+  const [dismissedResult, setDismissedResult] = useState<string | null>(null)
   const socket = useRef<WebSocket | null>(null)
   const pending = useRef<Pending | null>(null)
 
@@ -92,6 +94,7 @@ export function OnlineGame() {
             soundCursor.sync(message.gameId, message.revision)
           }
           setView({ ...message, receivedAt: performance.now() })
+          if (message.turn.phase !== 'my-turn') setTarget(null)
           setConnected(true)
           setStatus('연결됨')
           if (firstSnapshot && pending.current) current.send(JSON.stringify(pending.current))
@@ -145,6 +148,11 @@ export function OnlineGame() {
   const canAct = connected && !busy && (myDefense || myTurn)
   const canDefend = myDefense && canAct
   const label = (id: string) => id === 'black' ? '흑돌' : '백돌'
+  const finished = game?.status === 'finished'
+  const resultTitle = finished && (game.result.kind === 'draw' ? '무승부'
+    : game.result.winnerId === view?.playerId ? '승리' : '패배')
+  const rematchReady = view?.members.find((member) => member.id === view.playerId)?.ready
+  const showResult = finished && view && dismissedResult !== view.gameId
 
   return <section className="local-game" id="online-game" aria-labelledby="online-title">
     <div className="local-game__setup">
@@ -169,9 +177,9 @@ export function OnlineGame() {
         <p>나는 {label(view.playerId)} · {onlineRules.find(({ id }) => id === view.rules)?.title} · {view.mode === 'six-in-a-row' ? '6목' : '5목'}</p>
         <p>{view.members.map((m) => `${label(m.id)} ${m.connected ? '접속' : '재접속 대기'}${m.ready ? ' · 재대국 준비' : ''}`).join(' / ')}</p>
         {!game && <p>두 번째 플레이어가 참가하면 대국이 시작됩니다.</p>}
-        {game?.status === 'finished' && <>
-          <GameNotice>{game.result.kind === 'draw' ? '무승부' : `${label(game.result.winnerId)} 승리`}</GameNotice>
-          <Button disabled={!connected || busy || view.members.find((m) => m.id === view.playerId)?.ready} onClick={() => act({ type: 'rematch' })}>재대국 준비</Button>
+        {finished && <>
+          <GameNotice>대국 종료 · {resultTitle}</GameNotice>
+          <Button variant="secondary" onClick={() => setDismissedResult(null)}>대국 결과 보기</Button>
         </>}
       </>}
       {entry && <Button variant="secondary" onClick={leave}>방 나가기 · 대국 종료</Button>}
@@ -195,6 +203,9 @@ export function OnlineGame() {
           </GameNotice>
           </div>
         )}
+        {view?.turnClock && <Countdown label="턴 남은 시간" {...(view.turnClock.deadline === null
+          ? view.turnClock
+          : { deadline: view.turnClock.deadline - view.serverTime + view.receivedAt })} />}
         {augment?.pending && error && <GameNotice tone="error" alert>{error}</GameNotice>}
         {game.status === 'playing' && Boolean(augment?.choices.length) && augment && (
           <AugmentChoice key={`${view?.gameId}-${game.turn.round}`} choices={augment.choices} disabled={!connected || busy}
@@ -209,18 +220,27 @@ export function OnlineGame() {
         {Boolean(augment?.owned.length) && <p>내 증강 · {augment?.owned.map((id) => AUGMENTS[id].title).join(', ')}</p>}
         {response?.phase === 'snipe' && <SnipeNotice position={response.position} deadline={response.deadline - view.serverTime + view.receivedAt} />}
         {response?.phase === 'before' && <GameNotice>무장해제 적용 전에 방어할 수 있어요.</GameNotice>}
-        {response?.phase === 'after' && <GameNotice>무장해제로 버린 카드를 복구할 수 있어요.</GameNotice>}
         {view.skills.snipeOutcome && <SnipeOutcome outcome={view.skills.snipeOutcome} />}
         <p>상대 손패 {Object.entries(view.handCounts).find(([id]) => id !== view.playerId)?.[1] ?? 0}장</p>
         <fieldset disabled={!canAct}>
           <OnlineSkillHand state={view.skills} playerId={view.playerId} side={view.playerId === 'black' ? 'black' : 'white'}
             uiBlock={!connected ? '연결이 복구되면 사용할 수 있어요.' : busy ? '이전 행동을 처리하고 있어요.' : undefined}
             onTarget={setTarget} onAction={(action) => {
-            if (response) act({ type: 'respond', attackId: response.id, ...(action.type === 'card' ? { cardId: action.cardId, discardCardId: action.discardCardId } : {}) })
+            if (response) act({ type: 'respond', attackId: response.id, ...(action.type === 'card' ? { cardId: action.cardId } : {}) })
             else if (action.type === 'card') act({ type: 'use-skill', cardId: action.cardId })
           }} />
         </fieldset>
       </div>}
     </div>}
+    {showResult && <Modal key={view.gameId} title={resultTitle || '대국 종료'}
+      onDismiss={() => setDismissedResult(view.gameId)} actions={<>
+        <Button disabled={!connected || busy || rematchReady} onClick={() => act({ type: 'rematch' })}>재대결</Button>
+        <Button variant="secondary" onClick={leave}>종료</Button>
+      </>}>
+      <GameNotice>{!connected ? '다시 연결하는 중이에요.'
+        : rematchReady ? '상대가 재대결을 요청할 때까지 기다려 주세요.'
+        : '두 플레이어가 모두 재대결을 요청하면 새 대국이 시작돼요.'}</GameNotice>
+      {error && <GameNotice tone="error" alert>{error}</GameNotice>}
+    </Modal>}
   </section>
 }

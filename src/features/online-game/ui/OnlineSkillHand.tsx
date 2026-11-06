@@ -12,14 +12,13 @@ import whiteArt from '../../local-game/assets/skills-white.jpg'
 type Card = SkillView['hands'][string][number]
 type Phase = NonNullable<SkillView['response']>['phase']
 export type SelectedStoneSkill = { kind: 'snipe' | 'shield'; cardId: number }
-type HandAction = { type: 'card'; cardId: number; discardCardId?: number } | { type: 'pass' }
+type HandAction = { type: 'card'; cardId: number } | { type: 'pass' }
 
 const blockedText: Partial<Record<NonNullable<SkillView['cardBlocks'][number]>, string>> = {
   'not-active-player': '내 턴에 사용할 수 있어요.',
   'response-pending': '상대의 방어 응답을 기다리고 있어요.',
   'response-expired': '방어 응답 시간이 지났어요.',
   'augment-pending': '증강 선택이 끝나면 사용할 수 있어요.',
-  'invalid-nullify-cost': '버릴 카드 1장이 더 필요해요.',
   'invalid-skill-timing': '현재 시점에는 이 카드를 사용할 수 없어요.',
   'skill-used-this-turn': '이번 턴에 이미 사용했어요.',
   'no-skill-target': '판에 선택할 수 있는 대상 돌이 없어요.',
@@ -31,26 +30,10 @@ function cardOption({ id, skill }: Card, artSrc: string): Omit<SkillCardOption, 
       return {
         id: String(id),
         title: '무장해제',
-        timing: skill.response === 'before' ? '적용 전 응답' : '적용 후 응답',
+        timing: '적용 전 응답',
         kind: '공격',
         art: { src: artSrc, position: 'left' },
         description: '상대 손패에서 무작위로 카드 1장을 버리게 해요.',
-      }
-    case 'cancel':
-      return {
-        id: String(id),
-        title: '무장해제 무효화',
-        kind: '방어',
-        art: { src: artSrc, position: 'center' },
-        description: '상대의 무장해제가 적용되기 전에 막아요.',
-      }
-    case 'recover':
-      return {
-        id: String(id),
-        title: '손패 복구',
-        kind: '방어',
-        art: { src: artSrc, position: 'right' },
-        description: '방금 버려진 카드를 손패로 돌려받아요.',
       }
     case 'snipe':
     case 'shield':
@@ -74,11 +57,10 @@ function PlayableSkillCards({ hand, side, phase, cardBlocks, uiBlock, onAction, 
 }) {
   const name = useId()
   const [choice, setChoice] = useState('')
-  const [cost, setCost] = useState('')
   const artSrc = side === 'black' ? blackArt : whiteArt
   const groups = new Map<string, SkillCardOption>()
   for (const card of hand) {
-    const key = card.skill.kind === 'discard' ? `discard-${card.skill.response}` : card.skill.kind
+    const key = card.skill.kind
     const group = groups.get(key)
     if (group) group.count += 1
     else {
@@ -91,13 +73,9 @@ function PlayableSkillCards({ hand, side, phase, cardBlocks, uiBlock, onAction, 
   const options = [...groups.values()]
   const selected = options.find((option) => option.id === choice && !option.unavailable)
   const selectedKind = hand.find(({ id }) => String(id) === selected?.id)?.skill.kind
-  const choosingCost = selectedKind === 'nullify'
-  const costCards = hand.filter(({ id }) => String(id) !== selected?.id)
-  const validCost = costCards.some(({ id }) => String(id) === cost)
 
   function act(action: HandAction) {
     setChoice('')
-    setCost('')
     onAction(action)
   }
 
@@ -105,7 +83,7 @@ function PlayableSkillCards({ hand, side, phase, cardBlocks, uiBlock, onAction, 
     if (selectedKind === 'snipe' || selectedKind === 'shield') {
       onTarget({ kind: selectedKind, cardId })
     } else {
-      act({ type: 'card', cardId, ...(choosingCost ? { discardCardId: Number(cost) } : {}) })
+      act({ type: 'card', cardId })
     }
   }
 
@@ -113,19 +91,12 @@ function PlayableSkillCards({ hand, side, phase, cardBlocks, uiBlock, onAction, 
     <>
       <div className="local-game__card-list">
         {hand.length > 0
-          ? <SkillCardPicker name={name} side={side} cards={options} selected={selected?.id ?? ''} onSelect={(id) => { setChoice(id); setCost('') }} />
+          ? <SkillCardPicker name={name} side={side} cards={options} selected={selected?.id ?? ''} onSelect={setChoice} />
           : <p>손패에 카드가 없어요.</p>}
       </div>
-      {choosingCost && <label>
-        버릴 카드 1장 선택{' '}
-        <select value={cost} onChange={(event) => setCost(event.target.value)}>
-          <option value="">카드 선택</option>
-          {costCards.map((card) => <option key={card.id} value={card.id}>{cardOption(card, artSrc).title}</option>)}
-        </select>
-      </label>}
       <div className="local-game__actions">
-        <Button disabled={!selected || (choosingCost && !validCost)} onClick={() => { if (selected) playSelectedCard(Number(selected.id)) }}>
-          {choosingCost ? '카드를 버리고 무효화' : (selectedKind === 'snipe' || selectedKind === 'shield') ? '판에서 대상 선택' : '선택한 카드 사용'}
+        <Button disabled={!selected} onClick={() => { if (selected) playSelectedCard(Number(selected.id)) }}>
+          {selectedKind === 'snipe' || selectedKind === 'shield' ? '판에서 대상 선택' : '선택한 카드 사용'}
         </Button>
         {phase && <Button variant="secondary" onClick={() => act({ type: 'pass' })}>방어하지 않기</Button>}
       </div>

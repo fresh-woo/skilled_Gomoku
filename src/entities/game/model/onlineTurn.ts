@@ -1,6 +1,10 @@
 import type { GameState, PlayerId } from './game.ts'
 import type { SkillView } from './skillGameView.ts'
 
+export type OnlineTurnClock =
+  | { deadline: number; remainingMs?: never }
+  | { deadline: null; remainingMs: number }
+
 export type OnlineTurn =
   | { phase: 'waiting' | 'finished' }
   | {
