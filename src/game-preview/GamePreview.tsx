@@ -5,6 +5,7 @@ import { GomokuBoard } from '../design-system/GomokuBoard'
 import { boardCoordinate } from '../design-system/board-model'
 import type { BoardCell, BoardPoint, StoneColor } from '../design-system/board-model'
 import { Modal } from '../design-system/Modal'
+import { SkillEnginePreview } from './SkillEnginePreview'
 import { augments, exampleBoard, exampleHand, modes, skillCards } from './examples'
 import './game-preview.css'
 
@@ -117,6 +118,7 @@ export function GamePreview() {
           <p className="match-preview__legend">가운데 점은 마지막 수, ‘잠’은 잠금, ‘보’는 보호막 표시예요.</p>
         </div>
         <aside className="match-preview__sidebar" aria-label="대국 정보">
+          {import.meta.env.DEV && <SkillEnginePreview />}
           <div className="match-preview__panel">
             <div className="match-preview__turn"><h3>스킬카드</h3><span className="game-tag">{hand.length}장 · 예시</span></div>
             <p>카드를 열어 효과와 사용 조건을 확인하세요.</p>

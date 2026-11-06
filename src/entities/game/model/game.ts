@@ -33,19 +33,19 @@ export type GameState = PlayingGame | (GameBase & Readonly<{
   result: GameResult
 }>)
 
-type GameCommand = Readonly<{
+export type GameCommand = Readonly<{
   type: 'place-stone'
   actorId: PlayerId
   position: Position
 }>
-type TurnStarted = Readonly<{
+export type TurnStarted = Readonly<{
   type: 'turn-started'
   playerId: PlayerId
   round: number
   stoneGrant: 1
   skillCardGrant: 1
 }>
-type CommandRejection =
+export type CommandRejection =
   | 'game-finished'
   | 'not-active-player'
   | 'invalid-position'
